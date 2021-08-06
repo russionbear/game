@@ -9,15 +9,20 @@ import re
 import base64
 import hashlib
 
+ImagePath = 'resource/images'
+BasicDataPath = 'configure/basic_info.json'
+RecordsPath = 'configure/records.json'
+MapsPath = 'configure/maps.json'
+HafumanPath = 'configure/hafuman.json'
+
 Qapp = QApplication(sys.argv)
 
 class Resource():
-    def __init__(self, imageRoot='E:/TMP/gjzz02/geo', dataRoot='E:/Date_code/py_data/program02/basicData.json'):
-        self.imageRoot = imageRoot
-        self.dataRoot = dataRoot
-        self.hafumanRoot = 'hafuman.json'
-        self.basicInfopath = 'E:/Date_code/py_data/program02/basic_info.json'
-        self.recordsPath = 'E:/Date_code/py_data/program02/records.json'
+    def __init__(self):
+        self.imageRoot = ImagePath
+        self.hafumanRoot = HafumanPath
+        self.basicInfopath = BasicDataPath
+        self.recordsPath = RecordsPath
         self.data = []
         self.hafuman = []
         self.maps = []
@@ -30,7 +35,7 @@ class Resource():
         # self.check()
         # print(self.findByHafuman('1'), self.hafuman)
 
-        self.mapPath = 'E:\Date_code\py_data\program02\maps.json'
+        self.mapPath = MapsPath
         # self.maps.append(self.makeMap())
         # self.save()
         self.readMaps()
@@ -142,7 +147,7 @@ class Resource():
         with open(self.mapPath, 'r') as f:
             self.maps = json.load(f)
 
-    ### 没有一并改掉
+    ### 没有->一并改掉
     def saveMap(self, map=None, priName=None):
         if map:
             if priName:
