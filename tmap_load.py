@@ -243,7 +243,8 @@ class TMap(VMap):
             dw.moved = True
 
     def timerStop(self):
-        if self.user['flag'] == self.tUser['flag']:
+        # if self.user['flag'] == self.tUser['flag']:
+        if 1:
             if self.dwChoosedStatus == 'waiting':
                 self.dwChoosed.doBody(self.user['action']+'G')
                 self.dwChoosed.moved = True
@@ -459,7 +460,6 @@ class TMap(VMap):
                 for i in self.findChildren(DW):
                     if i.track['flag'] in j['enemy']:
                     # if i.track['flag'] != dw.track['flag']:
-                        print('ok')
                         tem_map[i.mapId[0]][i.mapId[1]] = 99
                 break
         # for i in tem_map:
