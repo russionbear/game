@@ -46,7 +46,6 @@ money模板需要格式化
 '''
 
 Qapp = QApplication(sys.argv)
-
 class basicEditW(QMainWindow):
     def initUI(self):
         self.setWindowTitle('基础数据编辑')

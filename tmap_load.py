@@ -459,9 +459,13 @@ class TMap(VMap):
                 for i in self.findChildren(DW):
                     if i.track['flag'] in j['enemy']:
                     # if i.track['flag'] != dw.track['flag']:
+                        print('ok')
                         tem_map[i.mapId[0]][i.mapId[1]] = 99
                 break
-
+        # for i in tem_map:
+        #     for j in i:
+        #         print(j, ' ', end='')
+        #     print()
         return tem_map
 
     def areaCount(self, dw:DW, costMap=None):
@@ -492,6 +496,7 @@ class TMap(VMap):
         return tem_area
 
     def roadCount(self, dw:DW, last, costMap=None):
+        print(last)
         if not costMap:
             print('roadCount error')
             return
@@ -834,6 +839,7 @@ class TMap(VMap):
 
     def animeMove(self, actions):
         inter_time = 200
+
         group = QSequentialAnimationGroup(self)
         for i in range(len(actions[:-1])):
             self.dwChoosed.raise_()
@@ -1066,6 +1072,7 @@ class TMap(VMap):
                                     self.unloadMenuItems[j1].setIcon(QIcon(j[0]['pixmap']))
                                     self.unloadMenuItems[j1].track = j[0]
 
+
                         #####显示路径
                         self.roadsToChoose['roads'] = self.roadCount(self.dwChoosed, i.mapId, self.costMap)
                         self.dwCpu('showpath')
@@ -1277,6 +1284,7 @@ class TMap(VMap):
                         newusers.append(i)
 
         self.users = newusers
+        # print(self.users)
         for i in self.users:
             if i['flag'] == self.tUser['flag']:
                 break
@@ -1535,6 +1543,8 @@ class TMap(VMap):
             self.Head_exp.setStyleSheet('background-color:red;color:red;border-radius:0;')
         else:
             self.Head_exp.setStyleSheet('background-color:white;color:white;border-radius:0;')
+
+
 
 
 if __name__ == '__main__':

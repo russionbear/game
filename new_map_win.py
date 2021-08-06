@@ -113,7 +113,6 @@ class newWin(QWidget):
                 self.brother.swapMap(self.map['name'])
                 self.close()
 
-
 if __name__ == '__main__':
     window = newWin()
     window.initUI()

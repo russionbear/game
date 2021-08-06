@@ -177,8 +177,8 @@ class DW(QFrame):
         self.statusList[5] = 'diving' if self.isDiving else None
         self.statusList[6] = 'stealth' if self.isStealth else None
 
-
-
+    def makeTrack(self):
+        pass
 
 
 class Geo(QLabel):
