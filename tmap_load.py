@@ -70,6 +70,7 @@ class TMap(VMap):
         self.actionTreeList = [None, 'areashowed', 'pathshowed', 'targetshowed', 'gtargetshowed', 'unloadingshow']
         self.choose_status = None  # None, areashowd, pathshowed, targetshowd, gtargetshowed, unloadshow
         self.dwChoosedStatus = 'move'
+        self.shouldShow = []
 
         self.dwsListWidget = None
 
@@ -248,6 +249,10 @@ class TMap(VMap):
             if self.dwChoosedStatus == 'waiting':
                 self.dwChoosed.doBody(self.user['action']+'G')
                 self.dwChoosed.moved = True
+            ### 非tUser单位只能由命令修改
+            elif self.dwChoosedStatus == 'encounter':
+                self.dwChoosed.doBody(self.user['action']+'G')
+                self.dwChoosed.moved = True
             elif self.dwChoosedStatus == 'stealth':
                 self.dwChoosed.doBody(self.user['action']+'G')
                 if self.choose_btn_stealth.text() == '下潜':
@@ -315,6 +320,8 @@ class TMap(VMap):
                 self.dwChoosed.moved = True
                 self.dwChoosed.doBody(self.user['action']+'G')
 
+            for i in self.shouldShow:
+                i.show()
             self.isRun = True
             self.clear(None)
             self.timer.stop()
@@ -550,7 +557,7 @@ class TMap(VMap):
                         continue
                     if self.pointer_dw[x][y]:
                         # print(self.pointer_dw[x][y].track['flag'], self.user['enemy'])
-                        if self.pointer_dw[x][y].track['flag'] in self.user['enemy'] :
+                        if self.pointer_dw[x][y].track['flag'] in self.user['enemy'] and not self.pointer_dw[x][y].isHidden():
                             if float(resource.basicData['gf'][dw.track['name']][self.pointer_dw[x][y].track['name']]) > 0:
                                 self.targetsToChoose['choosed'].append((x, y))
                                 # isEmpty = False
@@ -836,9 +843,28 @@ class TMap(VMap):
         if type == 'waiting':
             pass
 
-
+    ##只能被tUser调用哦
     def animeMove(self, actions):
         inter_time = 200
+        directions = [(-1, 1), (1, 1), (-1, -1), (1, -1)]
+        cols = len(self.map['map'][0])
+        rows = len(self.map['map'])
+        self.shouldShow = []
+        for i1, i in enumerate(actions):
+            tem_dw = self.pointer_dw[i[0]][i[1]]
+            if tem_dw:
+                if tem_dw.track['flag'] in self.user['enemy'] and i1 != len(actions) -1:
+                    actions = actions[0:i1]
+                    self.dwChoosedStatus = 'encounter'
+                    break
+            for j in directions:
+                x, y = i[0]+j[0], i[1]+j[1]
+                if x < 0 or x >= rows or y < 0 or y >= cols:
+                    continue
+                tem_dw = self.pointer_dw[x][y]
+                if tem_dw:
+                    if tem_dw.track['flag'] in self.user['enemy'] and tem_dw.isHidden() and tem_dw not in self.shouldShow:
+                        self.shouldShow.append(tem_dw)
 
         group = QSequentialAnimationGroup(self)
         for i in range(len(actions[:-1])):
@@ -1552,6 +1578,7 @@ class TMap(VMap):
                         continue
                     if self.pointer_dw[x][y]:
                         if self.pointer_dw[x][y].track['flag'] not in i1['enemy']:
+
                             break
                 else:
                     i.hide()
