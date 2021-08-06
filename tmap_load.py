@@ -458,7 +458,7 @@ class TMap(VMap):
         for j in self.users:
             if j['flag'] == dw.track['flag']:
                 for i in self.findChildren(DW):
-                    if i.track['flag'] in j['enemy']:
+                    if i.track['flag'] in j['enemy'] and not i.isHidden():
                     # if i.track['flag'] != dw.track['flag']:
                         tem_map[i.mapId[0]][i.mapId[1]] = 99
                 break
@@ -955,6 +955,8 @@ class TMap(VMap):
             if self.choose_status == None: #0:
                 self.clear(None)
                 for i in self.findChildren(DW):
+                    if i.track['flag'] in self.user['enemy'] and i.isHidden():
+                        continue
                     if i.contains(a0.pos()):
                         self.dwChoosed = i
                         self.costMap = self.costAreaCount(i)
@@ -1001,7 +1003,11 @@ class TMap(VMap):
                             elif resource.basicData['money']['canlaymine'][self.dwChoosed.track['name']] == '1':
                                 self.choose_btn_laymine.show()
 
-                        tem_dw = self.pointer_dw[i.mapId[0]][i.mapId[1]]           #####应小心改变它的值
+                        tem_dw = self.pointer_dw[i.mapId[0]][i.mapId[1]]           #####应小心改变它的值 ,可能值为：运输单位，None，隐形敌方单位
+                        if tem_dw:
+                            if tem_dw.track['flag'] in self.user['enemy'] and tem_dw.isHidden():
+                                tem_dw = None
+
                         ###占领
                         if self.pointer_geo[i.mapId[0]][i.mapId[1]].track['usage'] == 'build' and \
                                 resource.basicData['money']['classify'][self.dwChoosed.track['name']] == 'foot':
