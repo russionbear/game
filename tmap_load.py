@@ -1533,6 +1533,23 @@ class TMap(VMap):
                 self.pointer_dw[i.mapId[0]][i.mapId[1]] = None
                 i.deleteLater()
 
+        ## hide
+        for i, i1 in enumerate(self.users):
+            if i1['flag'] == self.tUser['flag']:
+                break
+        for i in self.findChildren(DW):
+            i.show()
+            if i.track['flag'] in i1['enemy'] and (i.isDiving or i.isStealth):
+                for j in directions:
+                    x, y = j[0]+i.mapId[0], j[1]+i.mapId[1]
+                    if x <0 or x >=rows or y < 0 or y >= cols:
+                        continue
+                    if self.pointer_dw[x][y]:
+                        if self.pointer_dw[x][y].track['flag'] not in i1['enemy']:
+                            break
+                else:
+                    i.hide()
+
         self.isRun = True
 
     def proValueChange(self):
