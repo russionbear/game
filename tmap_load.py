@@ -1641,9 +1641,32 @@ class TMap(VMap):
             self.Head_exp.setStyleSheet('background-color:white;color:white;border-radius:0;')
 
 
-
-
 if __name__ == '__main__':
+    commands = [{'type': 'builddw', 'flag': 'red',
+                 'dw': {'isAlive': True, 'blood': 10, 'oil': 60, 'bullect': 60, 'occpuiedisStealth': 0,
+                        'isDiving': False, 'loadings': False, 'supplies': [], 'moved': {}, 'mapId': True,
+                        'name': (6, 4)},
+                 'user': {'flag': 'red', 'enemy': ['blue'], 'action': 'right', 'command_bg': '会战', 'command': '消灭敌方',
+                          'outcome': 15000.0, 'money': 84999.0, 'hero': 'google', 'header_loc': None, 'canBeGua': True,
+                          'bout': 1, 'exp': 2}},
+                {'type': 'buied', 'flag': 'red', 'supplies': {'footmen': 5000.0}, 'dws': [(5, 5)],
+                 'user': {'flag': 'red', 'enemy': ['blue'], 'action': 'right', 'command_bg': '会战', 'command': '消灭敌方',
+                          'outcome': 15000.0, 'money': 84999.0, 'hero': 'google', 'header_loc': None, 'canBeGua': True,
+                          'bout': 1, 'exp': 2}}, {'type': 'waiting', 'road': [(5, 7), (5, 8), (4, 8)]},
+                {'type': 'stealth', 'road': [(9, 1), (10, 1)]}, {'type': 'stealth', 'road': [(6, 1), (5, 1)]},
+                {'type': 'occupy', 'road': [(7, 2), (7, 3)], 'occupy': 10},
+                {'type': 'attacking', 'road': [(6, 3), (5, 3), (4, 3), (3, 3)],
+                 'dw1': {'isAlive': True, 'blood': 10.0, 'oil': 10.0, 'bullect': 10.0, 'occpuiedisStealth': 0,
+                         'isDiving': False, 'loadings': False, 'supplies': [], 'moved': {}, 'mapId': True,
+                         'name': (3, 3)},
+                 'dw2': {'isAlive': True, 'blood': 6.0, 'oil': 10.0, 'bullect': 10.0, 'occpuiedisStealth': 0,
+                         'isDiving': False, 'loadings': False, 'supplies': [], 'moved': {}, 'mapId': False,
+                         'name': (3, 4)}}, {'type': 'loading', 'road': [(10, 0), (9, 0)]},
+                {'type': 'unloading', 'road': [(9, 0), (8, 0)], 'loadings': [], 'dws': [
+                    {'isAlive': True, 'blood': 10.0, 'oil': 90.0, 'bullect': 9.0, 'occpuiedisStealth': 0,
+                     'isDiving': False, 'loadings': False, 'supplies': [], 'moved': {}, 'mapId': True,
+                     'name': (7, 0)}]}]
+
     # QListWidgetItem()
     window = TMap()
     window.initUI()

@@ -177,9 +177,28 @@ class DW(QFrame):
         self.statusList[5] = 'diving' if self.isDiving else None
         self.statusList[6] = 'stealth' if self.isStealth else None
 
-    def makeTrack(self):
-        pass
+    def makeTrack(self, keys=[]):
+        keys1 = ['blood', 'oil', 'bullect', 'occpuied' 'isStealth', 'isDiving', 'loadings', 'supplies', 'moved', 'mapId', 'name']
+        keys2 = [self.bloodValue, self.oil, self.bullect, self.occupied, self.isStealth, \
+                 self.isDiving, self.loadings, self.supplies, self.moved, self.mapId, self.track['name']]
+        track = {'isAlive':True}
+        for i, j in enumerate(keys1):
+            if j in keys or not keys:
+                track[j] = keys2[i]
+        return track
 
+    def updateByTrack(self, track):
+        '''不处理isAlive'''
+        self.bloodValue = self.bloodValue if not track['blood'] else track['blood']
+        self.oil = self.oil if not track['oil'] else track['oil']
+        self.bullect = self.bullect if not track['bullect'] else track['bullect']
+        self.occupied = self.occupied if not track['occupied'] else track['occupied']
+        self.isStealth = self.isStealth if not track['isStealth'] else track['isStealth']
+        self.isDiving = self.isDiving if not track['isDiving'] else track['isDiving']
+        self.loadings = self.loadings if not track['loadings'] else track['loadings']
+        self.supplies = self.supplies if not track['supplies'] else track['supplies']
+        self.moved = self.moved if not track['moved'] else track['moved']
+        self.mapId = self.mapId if not track['mapId'] else track['mapId']
 
 class Geo(QLabel):
     def __init__(self, parent, newKey={}, mapId=None, brother=None):
