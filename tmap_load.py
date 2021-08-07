@@ -194,7 +194,9 @@ class TMap(VMap):
         self.childWindow = QWidget()
         self.childWindow.setWindowModality(Qt.ApplicationModal)
 
-    def judgement(self, dw:DW, endP):
+        self.commands = []
+
+    def judgement(self, dw:DW, endP, command):
         if not endP or not self.pointer_dw[endP[0]][endP[1]]:
             return
         self.isRun = False
@@ -218,17 +220,23 @@ class TMap(VMap):
         blood2 = 0 if round(blood2) <= 0 else round(blood2, 1)
         blood1 = dw.bloodValue - at2 * blood2 /10
         blood1 = 0 if round(blood1) <= 0 else round(blood1, 1)
+        dw1 = {}
+        dw2 = {}
         if blood1 == 0 and blood2 == 0:
             dw.deleteLater()
             enemy.deleteLater()
             self.pointer_dw[beginP[0]][beginP[1]] = None
             self.pointer_dw[endP[0]][endP[1]] = None
+            dw1['isAlive'] = False
+            dw2['isAlive'] = False
             print('all has beng!!!!!!!')
         elif blood1 == 0:
             dw.deleteLater()
             self.pointer_dw[beginP[0]][beginP[1]] = None
             print('dw has beng!!!!')
             enemy.doBlood(blood2)
+            dw1['isAlive'] = False
+            dw2 = enemy.makeTrack()
         elif blood2 == 0:
             enemy.deleteLater()
             self.pointer_dw[endP[0]][endP[1]] = None
@@ -236,12 +244,18 @@ class TMap(VMap):
             dw.doBlood(blood1)
             dw.doBody(self.user['action']+'G')
             dw.moved = True
+            dw1 = dw.makeTrack()
+            dw2['isAlive'] = False
         else:
             print('nothing has beng!!!')
             dw.doBlood(blood1)
             enemy.doBlood(blood2)
             dw.doBody(self.user['action']+'G')
             dw.moved = True
+            dw1 = dw.makeTrack()
+            dw2 = enemy.makeTrack()
+        command['dw1'] = dw1
+        command['dw2'] = dw2
 
     def timerStop(self):
         # if self.user['flag'] == self.tUser['flag']:
@@ -249,10 +263,16 @@ class TMap(VMap):
             if self.dwChoosedStatus == 'waiting':
                 self.dwChoosed.doBody(self.user['action']+'G')
                 self.dwChoosed.moved = True
+                road = self.roadsToChoose['roads'][self.roadsToChoose['point']]
+                command = {'type':self.dwChoosedStatus, 'road':road}
+                self.commands.append(command)
             ### 非tUser单位只能由命令修改
             elif self.dwChoosedStatus == 'encounter':
                 self.dwChoosed.doBody(self.user['action']+'G')
                 self.dwChoosed.moved = True
+                road = self.roadsToChoose['roads'][self.roadsToChoose['point']]
+                command = {'type':self.dwChoosedStatus, 'road':road}
+                self.commands.append(command)
             elif self.dwChoosedStatus == 'stealth':
                 self.dwChoosed.doBody(self.user['action']+'G')
                 if self.choose_btn_stealth.text() == '下潜':
@@ -260,14 +280,23 @@ class TMap(VMap):
                 else:
                     self.dwChoosed.isStealth = not self.dwChoosed.isStealth
                 self.dwChoosed.moved = True
+                road = self.roadsToChoose['roads'][self.roadsToChoose['point']]
+                command = {'type':self.dwChoosedStatus, 'road':road}
+                self.commands.append(command)
             elif self.dwChoosedStatus == 'attacking':
                 if self.dwChoosed.mapId[1] + 1 == self.targetsToChoose['choosed'][1]:
                     self.dwChoosed.doBody('right')
                 elif self.dwChoosed.mapId[1] - 1 == self.targetsToChoose['choosed'][1]:
                     self.dwChoosed.doBody('left')
-                self.judgement(self.dwChoosed, self.targetsToChoose['choosed'])
+                road = self.roadsToChoose['roads'][self.roadsToChoose['point']]
+                command = {'type':self.dwChoosedStatus, 'road':road}
+                self.judgement(self.dwChoosed, self.targetsToChoose['choosed'], command)
+                self.commands.append(command)
             elif self.dwChoosedStatus == 'occupy':
                 self.dwChoosed.occupied += round(self.dwChoosed.bloodValue)
+                road = self.roadsToChoose['roads'][self.roadsToChoose['point']]
+                command = {'type':self.dwChoosedStatus, 'road':road, 'occupy':self.dwChoosed.occupied}
+                self.commands.append(command)
                 if self.dwChoosed.occupied >= 20 :
                     dw = self.pointer_geo[self.dwChoosed.mapId[0]][self.dwChoosed.mapId[1]]
                     track = resource.find({'usage':'build', 'name':dw.track['name'], 'flag':self.user['flag']})
@@ -290,10 +319,14 @@ class TMap(VMap):
                 self.pointer_dw[actions[-1][0]][actions[-1][1]].loadings.append(com)
                 self.pointer_dw[actions[0][0]][actions[0][1]] = None
                 self.dwChoosed.deleteLater()
+                road = self.roadsToChoose['roads'][self.roadsToChoose['point']]
+                command = {'type':self.dwChoosedStatus, 'road':road}
+                self.commands.append(command)
                 print(self.pointer_dw)
             elif self.dwChoosedStatus == 'unloading':
                 notDel = []
                 print(self.planToUnload)
+                dws = []
                 for i in self.planToUnload['data']:
                     if i[2]:
                         print('is counting')
@@ -310,6 +343,7 @@ class TMap(VMap):
                         dw.show()
                         dw.raise_()
                         dw.doBody(self.user['action']+'G')
+                        dws.append(dw.makeTrack())
                     else:
                         notDel.append(int(i[0]['cursor']))
                 newloadings = []
@@ -319,6 +353,10 @@ class TMap(VMap):
                 self.dwChoosed.loadings = newloadings
                 self.dwChoosed.moved = True
                 self.dwChoosed.doBody(self.user['action']+'G')
+                road = self.roadsToChoose['roads'][self.roadsToChoose['point']]
+                command = {'type':self.dwChoosedStatus, 'road':road, 'loadings':newloadings.copy(), 'dws':dws}
+                self.commands.append(command)
+                print(len(self.commands), self.commands)
 
             for i in self.shouldShow:
                 i.show()
@@ -765,6 +803,9 @@ class TMap(VMap):
                     self.user['money'] -= float(resource.basicData['money']['money'][type.name])
                     self.user['outcome'] += float(resource.basicData['money']['money'][type.name])
                     #%%%%%%%
+                    command = {'type':'builddw', 'flag':self.user['flag'], 'dw':dw.makeTrack(), 'user':self.user.copy()}
+                    self.commands.append(command)
+
             # elif self.dwChoosedStatus == 'buy':
             #
         elif type == 'buy':
@@ -825,9 +866,14 @@ class TMap(VMap):
                         else:
                             self.dwChoosed.supplies[i] = end[i]
                     self.dwsListWidget.close()
+                    dws = []
                     for i in self.planToSupply[:-1]:
                         self.pointer_dw[i[0]][i[1]].doBody(self.user['action']+'G')
                         self.pointer_dw[i[0]][i[1]].moved = True
+                        dws.append(self.pointer_dw[i[0]][i[1]].mapId)
+
+                    command = {'type':'buied', 'flag':self.user['flag'], 'supplies':self.dwChoosed.supplies.copy(), 'dws':dws, 'user':self.user.copy()}
+                    self.commands.append(command)
 
                     self.clear(None)
                     self.dwsListWidget.close()
