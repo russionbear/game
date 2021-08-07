@@ -195,8 +195,9 @@ class TMap(VMap):
         self.childWindow.setWindowModality(Qt.ApplicationModal)
 
         self.commands = []
+        self.command = None
 
-    def judgement(self, dw:DW, endP, command):
+    def judgement(self, dw:DW, endP, command={}):
         if not endP or not self.pointer_dw[endP[0]][endP[1]]:
             return
         self.isRun = False
@@ -229,6 +230,8 @@ class TMap(VMap):
             self.pointer_dw[endP[0]][endP[1]] = None
             dw1['isAlive'] = False
             dw2['isAlive'] = False
+            dw1['mapId'] = dw.mapId
+            dw2['mapId'] = enemy.mapId
             print('all has beng!!!!!!!')
         elif blood1 == 0:
             dw.deleteLater()
@@ -237,6 +240,7 @@ class TMap(VMap):
             enemy.doBlood(blood2)
             dw1['isAlive'] = False
             dw2 = enemy.makeTrack()
+            dw1['mapId'] = dw.mapId
         elif blood2 == 0:
             enemy.deleteLater()
             self.pointer_dw[endP[0]][endP[1]] = None
@@ -246,6 +250,7 @@ class TMap(VMap):
             dw.moved = True
             dw1 = dw.makeTrack()
             dw2['isAlive'] = False
+            dw2['mapId'] = enemy.mapId
         else:
             print('nothing has beng!!!')
             dw.doBlood(blood1)
@@ -305,18 +310,8 @@ class TMap(VMap):
                 self.dwChoosed.doBody(self.user['action']+'G')
                 self.dwChoosed.moved = True
             elif self.dwChoosedStatus == 'loading':
-                com = {}
                 actions = self.roadsToChoose['roads'][self.roadsToChoose['point']]
-                com['hafuman'] = resource.findHafuman(self.dwChoosed.track['base64'])
-                com['oil'] = self.dwChoosed.oil
-                com['pixmap'] = self.dwChoosed.track['pixmap']
-                com['bullect'] = self.dwChoosed.bullect
-                com['blood'] = self.dwChoosed.bloodValue
-                com['moved'] = False
-                com['occupied'] = 0
-                com['name'] = self.dwChoosed.track['name']
-                com['cursor'] = len(self.pointer_dw[actions[-1][0]][actions[-1][1]].loadings)
-                self.pointer_dw[actions[-1][0]][actions[-1][1]].loadings.append(com)
+                self.pointer_dw[actions[-1][0]][actions[-1][1]].loadings.append(self.dwChoosed.makeTrack())
                 self.pointer_dw[actions[0][0]][actions[0][1]] = None
                 self.dwChoosed.deleteLater()
                 road = self.roadsToChoose['roads'][self.roadsToChoose['point']]
@@ -330,25 +325,22 @@ class TMap(VMap):
                 for i in self.planToUnload['data']:
                     if i[2]:
                         print('is counting')
-                        del i[0]['cursor'], i[0]['pixmap'], i[0]['name']
-                        track = resource.findByHafuman(i[0]['hafuman'])
-                        track.update(i[0])
                         dw = DW(self)
-                        dw.initUI(track, i[2])
+                        dw.initUI({'usage':'dw', 'flag':self.user['flag'], 'action':self.user['action'], 'name':i[0]['name']}, i[2])
                         self.pointer_dw[i[2][0]][i[2][1]] = dw
                         dw.setGeometry(self.pointer_geo[i[2][0]][i[2][1]].geometry())
                         dw.moved = True
-                        dw.oil = float(resource.basicData['gf'][track['name']]['oil'])
-                        dw.bullect = float(resource.basicData['gf'][track['name']]['bullect'])
+                        dw.oil = float(resource.basicData['gf'][i[0]['name']]['oil'])
+                        dw.bullect = float(resource.basicData['gf'][i[0]['name']]['bullect'])
                         dw.show()
                         dw.raise_()
                         dw.doBody(self.user['action']+'G')
                         dws.append(dw.makeTrack())
                     else:
-                        notDel.append(int(i[0]['cursor']))
+                        notDel.append(int(i[0]['mapId']))
                 newloadings = []
                 for i1, i in enumerate(self.dwChoosed.loadings):
-                    if i1 in notDel:
+                    if i['mapId'] in notDel:
                         newloadings.append(i)
                 self.dwChoosed.loadings = newloadings
                 self.dwChoosed.moved = True
@@ -358,13 +350,81 @@ class TMap(VMap):
                 self.commands.append(command)
                 print(len(self.commands), self.commands)
 
+            shouldShow = []
             for i in self.shouldShow:
                 i.show()
+                shouldShow.append(tuple(i.mapId))
+            self.commands[-1]['shouldShow'] = shouldShow
+
             self.isRun = True
             self.clear(None)
             self.timer.stop()
         else:
-            pass
+            for ii in self.users:
+                if ii['flag'] == self.command['flag']:
+                    break
+            if self.dwChoosedStatus == 'waiting':
+                self.dwChoosed.doBody(self.user['action'] + 'G')
+                self.dwChoosed.moved = True
+            elif self.dwChoosedStatus == 'encounter':
+                self.dwChoosed.doBody(self.user['action'] + 'G')
+                self.dwChoosed.moved = True
+            elif self.dwChoosedStatus == 'stealth':
+                self.dwChoosed.doBody(self.user['action'] + 'G')
+                self.dwChoosed.moved = True
+                if resource.basicData['money']['canDiving'][self.dwChoosed.track['name']] == '1':
+                    self.dwChoosed.isStealth = not self.dwChoosed.isStealth
+                else:
+                    self.dwChoosed.isDiving = not self.dwChoosed.isDiving
+            elif self.dwChoosedStatus == 'attacking':
+                enemy = self.pointer_dw[self.command['dw2']['mapId'][0]][self.command['dw2']['mapId'][1]]
+                tem_dw = self.pointer_dw[self.command['dw1']['mapId'][0]][self.command['dw1']['mapId'][1]]
+                if tem_dw.mapId[1] + 1 == enemy.mapId[1]:
+                    tem_dw.doBody('right')
+                elif tem_dw.mapId[1] - 1 == enemy.mapId[1]:
+                    tem_dw.doBody('left')
+                if not commands['dw1']['isAlive']:
+                    self.pointer_dw[self.command['dw1']['mapId'][0]][self.command['dw1']['mapId'][1]] = None
+                    tem_dw.deleteLater()
+                else:
+                    tem_dw.updateByTrack(self.command['dw1'])
+                    tem_dw.doBlood(tem_dw.bloodValue)
+                    tem_dw.doBody(ii['action']+'G')
+                if not commands['dw2']['isAlive']:
+                    self.pointer_dw[self.command['dw2']['mapId'][0]][self.command['dw2']['mapId'][1]] = None
+                    enemy.deleteLater()
+                else:
+                    enemy.updateByTrack(self.command['dw2'])
+                    enemy.doBlood(enemy.bloodValue)
+            elif self.dwChoosedStatus == 'occupy':
+                self.dwChoosed.occupied = self.command['occupy']
+                if self.dwChoosed.occupied >= 20:
+                    dw = self.pointer_geo[self.dwChoosed.mapId[0]][self.dwChoosed.mapId[1]]
+                    track = resource.find({'usage': 'build', 'name': dw.track['name'], 'flag': self.user['flag']})
+                    dw.change(track=track)
+                    self.dwChoosed.occupied = 0
+                self.dwChoosed.doBody(self.user['action'] + 'G')
+                self.dwChoosed.moved = True
+            elif self.dwChoosedStatus == 'loading':
+                tem_dw = self.pointer_dw[self.command['road'][0][0]][self.command['road'][0][1]]
+                self.pointer_dw[self.command['road'][0][0]][self.command['road'][0][1]] = None
+                enemy = self.pointer_dw[self.command['road'][-1][0]][self.command['road'][-1][1]]
+                enemy.loadings.append(tem_dw.makeTrack())
+                tem_dw.deleteLater()
+            elif self.dwChoosedStatus == 'unloading':
+                self.dwChoosed.loadings = self.command['loadings']
+                self.dwChoosed.doBody(ii['action']+'G')
+                self.dwChoosed.moved = True
+                for i in self.command['dws']:
+                    tem_dw = DW(self)
+                    tem_dw.initUI({'usage':'dw', 'flag':self.command['flag'], 'action':ii['action']+'G', 'name':i['name']})
+                    tem_dw.updateByTrack(i)
+                    tem_dw.setGeometry(self.pointer_geo[i['mapId'][0]][i['mapId'][1]].geometry())
+                    self.pointer_dw[i['mapId'][0]][i['mapId'][1]] = tem_dw
+
+            self.isRun = True
+            self.clear(None)
+            self.timer.stop()
 
     def timerGo(self, m):
         self.isRun = False
@@ -885,9 +945,46 @@ class TMap(VMap):
         else:
             print(type, data)
 
-    def dwCommandCpu(self, road, type, data=None):
-        if type == 'waiting':
-            pass
+    def dwCommandCpu(self, command):
+        for i1, i in enumerate(self.users):
+            if i['flag'] == command['flag']:
+                break
+        self.command = command
+        def handTheSame():
+            self.dwChoosed = self.pointer_dw[command['road'][0][0]][command['road'][0][1]]
+            self.dwChoosedStatus = command['type']
+            self.animeCommandMove(command['road'])
+        if command['type'] == 'builddw':
+            dw = DW(self)
+            dw.initUI({'usage':'dw', 'flag':command['flag'], 'name':command['dw']['name'], 'action':self.users[i1]['action']},)
+            dw.setGeometry(self.pointer_geo[command['dw']['mapId'][0]][command['dw']['mapId'][0]].geometry())
+            self.pointer_dw[command['dw']['mapId'][0]][command['dw']['mapId'][0]] = dw
+            dw.show()
+            dw.raise_()
+            self.users[i1]['moeny'] = command['user']['money']
+            self.users[i1]['outcome'] = command['user']['outcome']
+        elif command['type'] == 'buied':
+            tem_dw = self.pointer_dw[command['dws'][0][0]][command['dws'][0][1]]
+            tem_dw.supplies = command['supplies']
+            for i in command['dws']:
+                i.moved = True
+                i.doBody(self.users[i1]['action']+'G')
+            self.users[i1]['moeny'] = command['user']['money']
+            self.users[i1]['outcome'] = command['user']['outcome']
+        elif command['type'] == 'waiting':
+            handTheSame()
+        elif command['type'] == 'encounter':
+            handTheSame()
+        elif command['type'] == 'stealth':
+            handTheSame()
+        elif command['type'] == 'loading':
+            handTheSame()
+        elif command['type'] == 'unloading':
+            handTheSame()
+        elif command['type'] == 'occupy':
+            handTheSame()
+        elif command['type'] == 'attacking':
+            handTheSame()
 
     ##只能被tUser调用哦
     def animeMove(self, actions):
@@ -938,6 +1035,31 @@ class TMap(VMap):
         group.start()
         self.timerGo((len(actions)-1)*inter_time)
         # qapp.timerGo(len(actions)*inter_time)
+
+    def animeCommandMove(self, actions):
+        inter_time = 200
+        group = QSequentialAnimationGroup(self)
+        for i in range(len(actions[:-1])):
+            self.dwChoosed.raise_()
+            tem_anime = QPropertyAnimation(self.dwChoosed, b'pos', self)
+            tem_anime.setStartValue(self.pointer_geo[actions[i][0]][actions[i][1]].pos())
+            tem_anime.setEndValue(self.pointer_geo[actions[i+1][0]][actions[i+1][1]].pos())
+            tem_anime.setDuration(inter_time)
+            if i == 0:
+                tem_anime.setEasingCurve(QEasingCurve.InQuad)
+            group.addAnimation(tem_anime)
+        if len(actions) != 1:
+            self.dwChoosed.occupied = 0
+            if self.dwChoosedStatus != 'loading':
+                self.pointer_dw[actions[0][0]][actions[0][1]] = None
+                self.pointer_dw[actions[-1][0]][actions[-1][1]] = self.dwChoosed
+
+        if actions[-1][1] > actions[0][1]:
+            self.dwChoosed.doBody('right')
+        elif actions[-1][1] < actions[0][1]:
+            self.dwChoosed.doBody('left')
+        group.start()
+        self.timerGo((len(actions)-1)*inter_time)
 
     def clear(self, toChooseStatus):
         if toChooseStatus == 'return':
@@ -1005,23 +1127,6 @@ class TMap(VMap):
             return
         self.canRightMenuShow = True
         self.rightMenu.hide()
-
-        # if self.isCtrlDown:
-        #     for i in self.findChildren(DW):
-        #         if i.geometry().contains(a0.pos()):
-        #             for j in self.infoView.children():
-        #                 j.deleteLater()
-        #             self.infoView.addItem(QListWidgetItem(QIcon(resource.find({'usage':'dw2', 'name':'oil'})['pixmap']), 'oil\t'+str(i.oil)))
-        #             self.infoView.addItem(QListWidgetItem(QIcon(resource.find({'usage':'dw2', 'name':'bullect'})['pixmap']), 'bullect\t'+str(i.bullect)))
-        #             for j in i.loadings:
-        #                 self.infoView.addItem(QListWidgetItem(QIcon(j['pixmap']), j['name']))
-        #             for j1, j in i.supplies.items():
-        #                 self.infoView.addItem(QListWidgetItem(j1+'\t$'+str(j)))
-        #             self.infoView.move(a0.pos())
-        #             self.infoView.show()
-        #             self.infoView.raise_()
-        #             break
-        #     return
 
         if a0.button() == 1 and not self.hasMove:
             if self.choose_status == None: #0:
@@ -1146,8 +1251,8 @@ class TMap(VMap):
                                 for j in self.unloadMenuItems:
                                     j.hide()
                                 for j1, j in enumerate(self.planToUnload['data']):
-                                    self.unloadMenuItems[j1].setText(resource.basicData['money']['chineseName'][j[0]['name']]+'('+str(j[0]['cursor']+1)+')')
-                                    self.unloadMenuItems[j1].setIcon(QIcon(j[0]['pixmap']))
+                                    self.unloadMenuItems[j1].setText(resource.basicData['money']['chineseName'][j[0]['name']])
+                                    self.unloadMenuItems[j1].setIcon(QIcon(resource.find({'usage':'dw', 'flag':self.user['flag'], 'action':'left', 'name':j[0]['name']})['pixmap']))
                                     self.unloadMenuItems[j1].track = j[0]
 
 
@@ -1643,29 +1748,33 @@ class TMap(VMap):
 
 if __name__ == '__main__':
     commands = [{'type': 'builddw', 'flag': 'red',
-                 'dw': {'isAlive': True, 'blood': 10, 'oil': 60, 'bullect': 60, 'occpuiedisStealth': 0,
-                        'isDiving': False, 'loadings': False, 'supplies': [], 'moved': {}, 'mapId': True,
-                        'name': (6, 4)},
+                 'dw': {'isAlive': True, 'blood': 10, 'oil': 60, 'bullect': 60, 'occpuied': 0, 'isStealth': False,
+                        'isDiving': False, 'loadings': [], 'supplies': {}, 'moved': True, 'mapId': (6, 4),
+                        'name': 'thaad'},
                  'user': {'flag': 'red', 'enemy': ['blue'], 'action': 'right', 'command_bg': '会战', 'command': '消灭敌方',
-                          'outcome': 15000.0, 'money': 84999.0, 'hero': 'google', 'header_loc': None, 'canBeGua': True,
+                          'outcome': 12000.0, 'money': 87999.0, 'hero': 'google', 'header_loc': None, 'canBeGua': True,
                           'bout': 1, 'exp': 2}},
-                {'type': 'buied', 'flag': 'red', 'supplies': {'footmen': 5000.0}, 'dws': [(5, 5)],
+                {'type': 'buied', 'flag': 'red', 'supplies': {'footmen': 1200.0}, 'dws': [(5, 5)],
                  'user': {'flag': 'red', 'enemy': ['blue'], 'action': 'right', 'command_bg': '会战', 'command': '消灭敌方',
-                          'outcome': 15000.0, 'money': 84999.0, 'hero': 'google', 'header_loc': None, 'canBeGua': True,
-                          'bout': 1, 'exp': 2}}, {'type': 'waiting', 'road': [(5, 7), (5, 8), (4, 8)]},
-                {'type': 'stealth', 'road': [(9, 1), (10, 1)]}, {'type': 'stealth', 'road': [(6, 1), (5, 1)]},
-                {'type': 'occupy', 'road': [(7, 2), (7, 3)], 'occupy': 10},
+                          'outcome': 12000.0, 'money': 87999.0, 'hero': 'google', 'header_loc': None, 'canBeGua': True,
+                          'bout': 1, 'exp': 2}}, {'type': 'waiting', 'road': [(5, 7), (6, 7)], 'shouldShow': []},
+                {'type': 'stealth', 'road': [(9, 1), (10, 1)], 'shouldShow': []},
+                {'type': 'stealth', 'road': [(6, 1)], 'shouldShow': []},
+                {'type': 'occupy', 'road': [(7, 2), (7, 3)], 'occupy': 10, 'shouldShow': []},
+                {'type': 'loading', 'road': [(10, 0), (9, 0)], 'shouldShow': []},
                 {'type': 'attacking', 'road': [(6, 3), (5, 3), (4, 3), (3, 3)],
-                 'dw1': {'isAlive': True, 'blood': 10.0, 'oil': 10.0, 'bullect': 10.0, 'occpuiedisStealth': 0,
-                         'isDiving': False, 'loadings': False, 'supplies': [], 'moved': {}, 'mapId': True,
-                         'name': (3, 3)},
-                 'dw2': {'isAlive': True, 'blood': 6.0, 'oil': 10.0, 'bullect': 10.0, 'occpuiedisStealth': 0,
-                         'isDiving': False, 'loadings': False, 'supplies': [], 'moved': {}, 'mapId': False,
-                         'name': (3, 4)}}, {'type': 'loading', 'road': [(10, 0), (9, 0)]},
-                {'type': 'unloading', 'road': [(9, 0), (8, 0)], 'loadings': [], 'dws': [
-                    {'isAlive': True, 'blood': 10.0, 'oil': 90.0, 'bullect': 9.0, 'occpuiedisStealth': 0,
-                     'isDiving': False, 'loadings': False, 'supplies': [], 'moved': {}, 'mapId': True,
-                     'name': (7, 0)}]}]
+                 'dw1': {'isAlive': True, 'blood': 10.0, 'oil': 10.0, 'bullect': 10.0, 'occpuied': 0,
+                         'isStealth': False, 'isDiving': False, 'loadings': [], 'supplies': {}, 'moved': True,
+                         'mapId': (3, 3), 'name': 'B2'},
+                 'dw2': {'isAlive': True, 'blood': 6.0, 'oil': 10.0, 'bullect': 10.0, 'occpuied': 0, 'isStealth': False,
+                         'isDiving': False, 'loadings': [], 'supplies': {}, 'moved': False, 'mapId': (3, 4),
+                         'name': 'submarine'}, 'shouldShow': []},
+                {'type': 'unloading', 'road': [(9, 0), (8, 0), (7, 0), (6, 0), (5, 0)], 'loadings': [], 'dws': [
+                    {'isAlive': True, 'blood': 10, 'oil': 90.0, 'bullect': 9.0, 'occpuied': 0, 'isStealth': False,
+                     'isDiving': False, 'loadings': [], 'supplies': {}, 'moved': True, 'mapId': (5, 1),
+                     'name': 'footmen'}]}]
+
+
 
     # QListWidgetItem()
     window = TMap()

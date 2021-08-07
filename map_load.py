@@ -178,7 +178,7 @@ class DW(QFrame):
         self.statusList[6] = 'stealth' if self.isStealth else None
 
     def makeTrack(self, keys=[]):
-        keys1 = ['blood', 'oil', 'bullect', 'occpuied' 'isStealth', 'isDiving', 'loadings', 'supplies', 'moved', 'mapId', 'name']
+        keys1 = ['blood', 'oil', 'bullect', 'occpuied', 'isStealth', 'isDiving', 'loadings', 'supplies', 'moved', 'mapId', 'name']
         keys2 = [self.bloodValue, self.oil, self.bullect, self.occupied, self.isStealth, \
                  self.isDiving, self.loadings, self.supplies, self.moved, self.mapId, self.track['name']]
         track = {'isAlive':True}
@@ -188,7 +188,7 @@ class DW(QFrame):
         return track
 
     def updateByTrack(self, track):
-        '''不处理isAlive'''
+        '''不处理isAlive, name'''
         self.bloodValue = self.bloodValue if not track['blood'] else track['blood']
         self.oil = self.oil if not track['oil'] else track['oil']
         self.bullect = self.bullect if not track['bullect'] else track['bullect']
