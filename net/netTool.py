@@ -42,8 +42,8 @@ LOCK = threading.RLock()
 
 
 class RoomServer(myThread):
-    def __init__(self, map={'type': 'map', 'author': 'hula',
-                            'map': {'name': 'netmap', 'map': [1, 1, 1, 1], 'dws': [], 'dsc': 'just for test'}},
+    def __init__(self, map={'type': 'map', 'author': 'hula', 'authorid':'123',
+                            'map': {'name': 'netmap', 'map': [1, 1, 1, 1], 'dw': [], 'dsc': 'just for test'}},
                  localUser=None, contains=2):
         super(RoomServer, self).__init__()
         self.localUser = {'addr': (LOCAL_IP, BROADCAST_PORT), 'flag': 'none', 'hero': 'google', 'username': 'aaaa',
