@@ -3,17 +3,17 @@
 # @FileName  :server.py
 # @Time      :2021/8/2 19:10
 # @Author    :russionbear
-import time
+import socket
+import time, zlib, json, asyncio
+from netTool import LOCAL_IP, BROADCAST_PORT, myThread, LOCK, RoomServer
 
-# from netTool import RoomBuilder
-#
-# builder = RoomBuilder()
-# builder.start()
 
-from netTool import RoomServer
 
-server = RoomServer()
-
+if __name__ == '__main__':
+    server = RoomServer()
+    server.start()
+    time.sleep(4)
+    server.beginGame()
 
 
 

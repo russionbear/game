@@ -5,6 +5,8 @@
 # @Author    :russionbear
 
 import time, socket, json, threading, re, ctypes, inspect, hashlib, asyncio
+import zlib
+
 
 def get_host_ip():
     try:
@@ -36,260 +38,132 @@ class myThread(threading.Thread):
 
 BROADCAST_PORT = 22222
 LOCAL_IP = get_host_ip()
-
-class RoomBuilder(myThread):
-    def __init__(self, data=None, bind=None):
-        super(RoomBuilder, self).__init__()
-        bind = LOCAL_IP, BROADCAST_PORT
-        self.bind = bind
-        data = {'author':'king', 'map':{'a':'aaa', 'b':'bbbb'}, 'contains':1}
-        self.data = data
-        self.md5 = '123'
-        self.room_accepted = []
-        self.canClose = False
-        self.root_canModify = True
-
-    def run(self):
-        self.room_broadcast_process = myThread(target=self.broadcast)
-        self.room_server_process = myThread(target=self.roomServer)
-        self.room_server_process.setDaemon(True)
-        self.room_broadcast_process.setDaemon(True)
-        self.room_broadcast_process.start()
-        self.room_server_process.start()
-        # self.room_broadcast_process.join()
-        # self.room_server_process.join()
-        while True:
-            if self.canClose:
-                break
-
-    def broadcast(self):
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  as server_socket:
-            server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-            context = 'find users'+json.dumps(self.data)
-            while True:
-                server_socket.sendto(context.encode('utf-8'), ("<broadcast>", int(self.bind[1])))
-                print('broadcast', self.bind[1])
-                time.sleep(2)
-
-    def roomServer(self):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as server_socket:
-            self.room_server_socket = server_socket
-            server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            server_socket.bind(self.bind)
-            server_socket.listen(9)
-            while True:
-                conn, address = server_socket.accept()
-                print('one connected')
-                process = threading.Thread(target=self.roomServerHandle, args=(conn, address))
-                process.start()
-
-    def roomServerHandle(self, conn, addr):
-        # while True:
-        try:
-            data = conn.recv(1024).decode('utf-8')
-        except ConnectionResetError:
-            print('close it!')
-            conn.close()
-            return
-            # break
-        # print(data)
-        if re.match('i am going.*', data.lower()) and self.data['contains'] - len(self.room_accepted) > 0:
-            print('one accepted')
-            while True:
-                if self.root_canModify:
-                    self.root_canModify = False
-                    response = 'you were in'
-                    conn.send(response.encode())
-                    self.room_accepted.append((addr, data))
-                    self.root_canModify = True
-                    if self.data['contains'] == len(self.room_accepted):
-                        # self.room_server_process.join()
-                        # self.room_broadcast_process.join()
-                        self.room_server_process.stop()
-                        self.room_broadcast_process.stop()
-                        self.canClose = True
-                    break
-
-        # break
-        conn.close()
+LOCK = threading.RLock()
 
 
-class RoomFinder(myThread):
-    def __init__(self, bind=None):
-        super(RoomFinder, self).__init__()
-        bind = "0.0.0.0", BROADCAST_PORT
-        self.bind = bind
-        self.rooms = []
-        self.canModify = True
-        self.canClose = False
-        self.updateTime = time.time()
-
-
-    def run(self):
-        self.getroom_process = myThread(target=self.getAllroom)
-        self.updateroom_process = myThread(target=self.updateRoom)
-        self.getroom_process.setDaemon(True)
-        self.updateroom_process.setDaemon(True)
-        self.getroom_process.start()
-        self.updateroom_process.start()
-        while True:
-            if self.canClose:
-                break
-
-    def getAllroom(self):
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as client_socket:
-            self.client_socket = client_socket
-            client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_BROADCAST, 1)
-            client_socket.bind(self.bind)
-            while True:
-                message, address = client_socket.recvfrom(1024)
-                message = message.decode('utf-8')
-                if re.match('find users.*', message):
-                    hasOne = False
-                    for i in self.rooms:
-                        if i[1] == address:
-                            hasOne = True
-                            break
-                    if hasOne:
-                        continue
-                    print('find one', message, address)
-                    while True:
-                        print('fsdf345')
-                        if self.canModify:
-                            self.canModify = False
-                            self.rooms.append((message, address, time.time()))
-                            self.canModify = True
-                            print('渲染窗口')
-                            break
-
-    def updateRoom(self):
-        while True:
-            if time.time() - self.updateTime > 10 and self.canModify:
-                print('clear', self.rooms)
-                self.canModify = False
-                self.rooms = []
-                self.canModify = True
-                self.updateTime = time.time()
-
-    def chooseRoom(self, get_time, userData):
-        while True:
-            if self.canModify:
-                self.canModify = False
-                for i in self.rooms:
-                    print(i[2], get_time, i)
-                    if i[2] == get_time:
-                        self.canModify = False
-                        # self.getroom_process.join()
-                        # self.updateroom_process.join()
-                        self.getroom_process.stop()
-                        self.updateroom_process.stop()
-                        # for j in self.processes:
-                        #     j.stop()
-                        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-                            client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-                            client_socket.connect((i[1][0], BROADCAST_PORT))
-                            requestion = 'i am going'+json.dumps(userData)
-                            client_socket.send(requestion.encode('utf-8'))
-                            response = client_socket.recv(100).decode('utf-8')
-                            if re.match('you were in.*', response):
-                                print('choosed ok!!!!(渲染)')
-                                client_socket.close()
-                                self.canClose = True
-                                return
-                            break
-
-
-'''begin_server, send, accept, end'''
-                    
 class RoomServer(myThread):
-    def __init__(self, bind=(LOCAL_IP, BROADCAST_PORT), users=None, map=None):
-        users = [{'address':('192.168.142.15', BROADCAST_PORT), 'userInfo':'none'}]
-        self.serverSocket = None
-        self.serverBind = bind
-        self.users = users
+    def __init__(self, map={'type': 'map', 'author': 'hula',
+                            'map': {'name': 'netmap', 'map': [1, 1, 1, 1], 'dws': [], 'dsc': 'just for test'}},
+                 localUser=None, contains=2):
+        super(RoomServer, self).__init__()
+        self.localUser = {'addr': (LOCAL_IP, BROADCAST_PORT), 'flag': 'none', 'hero': 'google', 'username': 'aaaa',
+                          'userid': '123', 'status': 1}
+        # self.users = [self.localUser]
+        self.users = []
+        self.contains = 2
         self.canModify = True
-        self.md5 = hashlib.md5(str(time.time()).encode('utf-8')).hexdigest()[:8]
         self.map = map
-        self.handleProcesses = []
 
+        self.serverSocket = None
+        self.serverBind = (LOCAL_IP, BROADCAST_PORT)
+        self.handleProcesses = []
+        self.canEnd = False
+        self.isInGame = False
+
+    def run(self) -> None:
         self.buildServer()
+        while 1:
+            if self.canEnd:
+                break
 
     def buildServer(self):
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.serverSocket = server_socket
         server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server_socket.bind(self.serverBind)
-        server_socket.listen(5)
-        count = 0
+        server_socket.listen(9)
         while True:
-            print('waiting')
             conn, address = server_socket.accept()
-            for i in range(len(self.users)):
-                # print(self.users[i]['address'], address)
-                if self.users[i]['address'][0] == address[0]:
-                    tem_process = myThread(target=self.serverHandle, args=(conn, address))
-                    tem_process.start()
-                    self.users[i]['status'] = 0
-                    self.users[i]['conn'] = conn
-                    self.users[i]['address'] = address
-                    count += 1
-                    self.handleProcesses.append(tem_process)
-                    break
-            # print(count, len(self.users))
-            if count == len(self.users):
-                break
+            if self.contains <= len(self.users):
+                conn.close()
+            if self.isInGame:
+                for i in self.users:
+                    if i['addr'][0] == address[0]:
+                        break
+                else:
+                    conn.close()
+                    continue
+            tem_process = myThread(target=self.serverHandle, kwargs={'conn': conn, 'address': address})
+            self.handleProcesses.append(tem_process)
+            tem_process.start()
 
     def serverHandle(self, conn, address):
-        def endConnect(addr43):
-            for i in range(len(self.users)):
-                if self.users[i]['address'] == addr43:
-                    while True:
+        def updateUsers(addr43, new=None):
+            for i1, i in enumerate(self.users):
+                if i['addr'][0] == addr43:
+                    while 1:
                         if self.canModify:
                             self.canModify = False
-                            self.users[i]['status'] = 0
+                            self.users.pop(i1)
+                            if new != None:
+                                self.users.append(new)
                             self.canModify = True
                             break
                     break
-        try:
-            data = conn.recv(100).decode('utf-8')
-        except ConnectionResetError:
-            endConnect(address)
-            return
-        if data != 'accepted':
-            endConnect(address)
-            return
-        print('connected')
-        for i in range(len(self.users)):
-            if self.users[i]['address'] == address:
-                self.users[i]['status'] = 1
-                break
-        else:
-            print('no connection')
-            return
-        while True:
+            else:
+                self.users.append(new)
+            info = {'type': 'userstatus', 'users': []}
+            for i in self.users:
+                info['users'].append(i.copy())
+                del info['users'][-1]['conn']
+                # print(i['conn'])
+            self.serverSend(info)
+
+        while 1:
             try:
-                # print(conn.recv(102))
-                data = json.loads(conn.recv(1024).decode('utf-8'))
-            except ConnectionResetError:
-                print('hhhfsd')
-                endConnect(address)
-                return
-            # print('recive', data)
-            if data['type'] == 'map':
-                # conn.send(self.map)
-                print('send the map')
-            elif data['type'] == 'command':
-                tem_process = myThread(target=self.serverSend, args=(data, address))
-                tem_process.start()
+                requstion = conn.recv(1024)
+                requstion = json.loads(zlib.decompress(requstion).decode('utf-8'))
+            except (ConnectionResetError, zlib.error):
+                if not self.isInGame:
+                    updateUsers(address[0])
+                else:
+                    while 1:
+                        if self.canModify:
+                            for j1, j in enumerate(self.users):
+                                if j['addr'][0] == address[0]:
+                                    self.users[j1]['status'] = 0
+                                    break
+                            print('更新按钮')
+                            break
+                conn.close()
+                break
+            else:
+                if self.isInGame:
+                    while 1:
+                        if self.canModify:
+                            for j1, j in enumerate(self.users):
+                                if j['addr'][0] == address[0]:
+                                    self.users[j1]['status'] = 1
+                                    self.users[j1]['conn'] = conn
+                                    break
+                            break
 
+            if self.isInGame:
+                pass
+            else:
+                if requstion['type'] == 'findroom':
+                    conn.send(zlib.compress(json.dumps(self.map).encode('utf-8')))
+                elif requstion['type'] == 'enterroom':
+                    requstion['user']['conn'] = conn
+                    requstion['user']['addr'] = address
+                    requstion['user']['status'] = 1
+                    updateUsers(address[0], requstion['user'])
+                    print('更新按钮')
+                elif requstion['type'] == 'userupdate':
+                    requstion['user']['conn'] = conn
+                    requstion['user']['addr'] = address
+                    requstion['user']['status'] = 1
+                    updateUsers(address[0], requstion['user'])
+                elif requstion['type'] == 'talk':
+                    # self.serverSend(requstion, address[0])
+                    self.serverSend(requstion)
 
-    def serverSend(self, command, address=None):
-        ###{'type':'command','md5':self.md5, 'command':command}
+    def serverSend(self, command, addressIp=None):
         async def send(i):
             if self.users[i]['status'] == 0:
                 return
             tem = self.users[i]['conn']
-            tem.send(json.dumps(command).encode('utf-8'))
+            tem.send(zlib.compress(json.dumps(command).encode('utf-8')))
 
         tasks = []
         new_loop = asyncio.new_event_loop()
@@ -297,7 +171,7 @@ class RoomServer(myThread):
         loop = asyncio.get_event_loop()
 
         for i1, i in enumerate(self.users):
-            if i['address'] == address:
+            if i['addr'][0] == addressIp:
                 continue
             tasks.append(asyncio.ensure_future(send(i1)))
         try:
@@ -310,44 +184,108 @@ class RoomServer(myThread):
             self.serverSocket.close()
         for i in self.handleProcesses:
             i.stop()
-        
-class RoomClient(myThread):
-    def __init__(self, bind=(LOCAL_IP, BROADCAST_PORT), server=('192.168.142.15', BROADCAST_PORT)):
-        super(RoomClient, self).__init__()
-        self.clientSocket = None
-        self.bind = bind
-        self.serverBind = server
-        self.canModify = True
 
-    def run(self) -> None:
-        self.recevieServer()
+    def beginGame(self):
+        # if len(self.users) != self.contains:
+        #     return
+        print('抛出开始游戏事件 >> qt界面')
+        command = {'type': 'gamebegin'}
+        self.serverSend(command)
+        self.isInGame = True
 
-    def recevieServer(self):
-        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as client_socket:
-            self.clientSocket = client_socket
-            client_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+
+def findRooms():
+    prefix = LOCAL_IP.split('.')
+    prefix = prefix[0]+'.'+prefix[1]+'.'+prefix[2]+'.'
+    ips = []
+    def ping(ii):
+        ip = prefix+str(ii)
+        client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        client.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        client.settimeout(3)
+        try:
+            client.connect((ip, BROADCAST_PORT))
+        except socket.timeout:
+            return
+        except OSError:
+            return
+        requstion = {'type':'findroom'}
+        client.send(zlib.compress(json.dumps(requstion).encode('utf-8')))
+        try:
+            response = client.recv(3072)
+        except:
+            client.close()
+            return
+        response = json.loads(zlib.decompress(response).decode('utf-8'))
+        client.close()
+        ips.append((ip, response))
+    processes = []
+    for i in range(1, 255):
+        tt = myThread(target=ping, kwargs={'ii':i})
+        processes.append(tt)
+    for i in processes:
+        i.start()
+    for i in processes:
+        i.join()
+    return ips
+
+# gameNet =
+
+def enterRoom(addr):
+    requestion = {'type':'enterroom', 'user':{'flag': 'none', 'hero': 'google', 'username': 'bbb', 'userid': '222'}}
+    client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        client.connect(addr)
+    except socket.timeout:
+        print('room error')
+        return
+    except OSError:
+        print('roos error')
+        return
+    print('enterRoom ok')
+    def updateUsers():
+        while 1:
             try:
-                client_socket.connect(self.bind)
-            except ConnectionRefusedError:
-                print('房主跑了')
-                return
-            client_socket.send('accepted'.encode('utf-8'))
-            print('ok,connected', self.bind)
-            while client_socket:
-                try:
-                    ddfs = client_socket.recv(1024).decode('utf-8')
-                    print(ddfs, 'ddfs')
-                    response = json.loads(ddfs)
-                except ConnectionResetError:
-                    print('the game is over')
-                    return
-                print('recive', response)
-                if response['type'] == 'command':
-                    print('获得指令')
-                    
-    def sendServer(self, command):
-        self.clientSocket.send(json.dumps(command).encode('utf-8'))
+                response = client.recv(3072)
+                response = json.loads(zlib.decompress(response).decode('utf-8'))
+            # except (ConnectionResetError, zlib.error):
+            #     print('direct to find rooms')
+            #     client.close()
+            #     return
+            except zlib.error:
+                client.close()
+                break
+            if response['type'] == 'userstatus':
+                print(response['users'])
+            elif response['type'] == 'gamebegin':
+                print('game begin')
+                print('按钮点击失效，更新窗口')
+            elif response['type'] == 'talk':
+                print(response['context'])
+            # print(response)
+    tt = myThread(target=updateUsers)
+    tt.start()
+    client.send(zlib.compress(json.dumps(requestion).encode('utf-8')))
+    time.sleep(1)
+    requestion = {'type': 'userupdate', 'user': {'flag': 'red', 'hero': 'google', 'username': 'bbb', 'userid': '222'}}
+    def chooseRol():
+        client.send(zlib.compress(json.dumps(requestion).encode('utf-8')))
+    chooseRol()
 
-# if __name__ == '__main__':
-#     print(get_host_ip())
+    time.sleep(1)
+    requestion = {'type': 'talk', 'fromid':'222', 'context':'talk'}   ### fromid
+    def sendMessage():
+        client.send(zlib.compress(json.dumps(requestion).encode('utf-8')))
+    sendMessage()
+
+    tt.join()
+
+
+
+if __name__ == '__main__':
+    # print(get_host_ip())
+    # print(findRooms())
+    enterRoom((LOCAL_IP, BROADCAST_PORT))
+
+
 
