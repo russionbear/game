@@ -44,11 +44,12 @@ LOCK = threading.RLock()
 class RoomServer(myThread):
     def __init__(self, map={'type': 'map', 'author': 'hula', 'authorid':'123',
                             'map': {'name': 'netmap', 'map': [1, 1, 1, 1], 'dw': [], 'dsc': 'just for test', 'flags':['red', 'blue']}},
-                 localUser=None, contains=2):
+                 localUser=None):
         super(RoomServer, self).__init__()
-        self.localUser = {'addr': (LOCAL_IP, BROADCAST_PORT), 'flag': 'none', 'hero': 'google', 'username': 'aaaa',
-                          'userid': '123', 'status': 1}
+        # self.localUser = {'addr': (LOCAL_IP, BROADCAST_PORT), 'flag': 'none', 'hero': 'google', 'username': 'aaaa',
+        #                   'userid': '123', 'status': 1}
         # self.users = [self.localUser]
+        self.localUser = localUser
         self.users = []
         self.contains = len(map['map']['flags'])
         self.canModify = True
@@ -231,7 +232,6 @@ def findRooms():
 # gameNet =
 
 def enterRoom(addr):
-    requestion = {'type':'enterroom', 'user':{'flag': 'none', 'hero': 'google', 'username': 'bbb', 'userid': '222'}}
     client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
         client.connect(addr)
@@ -264,6 +264,7 @@ def enterRoom(addr):
             # print(response)
     tt = myThread(target=updateUsers)
     tt.start()
+    requestion = {'type':'enterroom', 'user':{'flag': 'none', 'hero': 'google', 'username': 'bbb', 'userid': '222'}}
     client.send(zlib.compress(json.dumps(requestion).encode('utf-8')))
     time.sleep(1)
     requestion = {'type': 'userupdate', 'user': {'flag': 'red', 'hero': 'google', 'username': 'bbb', 'userid': '222'}}

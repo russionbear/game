@@ -6,10 +6,10 @@
 
 from PyQt5.Qt import *
 from PyQt5 import QtCore
-import sys, time, functools
+import sys, time, functools, socket, json, zlib
 from resource_load import resource
 from map_load import DW, Geo
-from net.netTool import findRooms, enterRoom, RoomServer, LOCAL_IP, BROADCAST_PORT
+from net.netTool import findRooms, enterRoom, RoomServer, LOCAL_IP, BROADCAST_PORT, myThread
 
 Qapp = QApplication(sys.argv)
 
@@ -160,8 +160,9 @@ class SkimRoom(QWidget):
 
         self.initUI(winSize)
 
-        self.updateRooms()
         # self.updateRooms()
+        self.startTimer(5000)
+        self.findRoomThread = None
 
     def initUI(self, winSize):
         self.setFixedSize(winSize)
@@ -203,30 +204,35 @@ class SkimRoom(QWidget):
         self.area.setWidget(self.miniMap)
 
     def updateRooms(self):
-        # newData = findRooms()
-        newData = [(('192.168.100.9', 1111), {'type': 'map', 'author': 'hula', 'authorid': '123',
-                       'map': {'name': 'netmap', 'map': [[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]], 'dw': [], 'dsc': 'just for test'}})]
-        if self.roomPoint == -1:
-            selected = None
-        else:
-            selected = self.ipsAndRooms[self.roomPoint]
-        if selected:
-            for i1, i in newData:
-                if i[0][0] == selected[0][0]:
-                    self.roomPoint = i1
-                    break
-        self.ipsAndRooms = newData
-        self.roomList.clear()
-        for i in self.ipsAndRooms:
-            item = QListWidgetItem(i[1]['map']['name']+'\t<'+i[1]['author']+'>')
-            item.roomIp = i[0][0]
-            self.roomList.addItem(item)
-        if self.roomPoint != -1:
-            self.roomList.selectedIndexes(self.roomPoint)
-            self.text_dsc.setText(self.ipsAndRooms[self.roomPoint][1]['map']['dsc'])
-            self.miniMap.deleteLater()
-            self.miniMap = miniVMap(self.ipsAndRooms[self.roomPoint][1]['map']['map'])
-            self.area.setWidget(self.miniMap)
+        try:
+            newData = findRooms()
+            # newData = [(('192.168.100.9', 1111), {'type': 'map', 'author': 'hula', 'authorid': '123',
+            #                'map': {'name': 'netmap', 'map': [[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]], 'dw': [], 'dsc': 'just for test'}})]
+            if self.roomPoint == -1:
+                selected = None
+            else:
+                selected = self.ipsAndRooms[self.roomPoint]
+            if selected:
+                print(selected)
+                for i1, i in newData:
+                    if i[0][0] == selected[0][0]:
+                        self.roomPoint = i1
+                        break
+            self.ipsAndRooms = newData
+            self.roomList.clear()
+            for i in self.ipsAndRooms:
+                item = QListWidgetItem(i[1]['map']['name']+'\t<'+i[1]['author']+'>')
+                item.roomIp = i[0][0]
+                self.roomList.addItem(item)
+            if self.roomPoint != -1:
+                self.roomList.selectedIndexes(self.roomPoint)
+                self.text_dsc.setText(self.ipsAndRooms[self.roomPoint][1]['map']['dsc'])
+                self.miniMap.deleteLater()
+                self.miniMap = miniVMap(self.ipsAndRooms[self.roomPoint][1]['map']['map'])
+                self.area.setWidget(self.miniMap)
+        finally:
+            print('finally error')
+            pass
 
     def choosedMap(self, map:QtCore.QModelIndex):
         room = (LOCAL_IP, BROADCAST_PORT), {'type': 'map', 'author': resource.userInfo['username'], 'authorid': resource.userInfo['userid'],
@@ -236,6 +242,17 @@ class SkimRoom(QWidget):
 
     def skimMaps(self):
         self.skimMapsView = SkimMaps(self)
+
+    def timerEvent(self, a0: 'QTimerEvent') -> None:
+        if self.findRoomThread:
+            self.findRoomThread.stop()
+        self.findRoomThread = myThread(target=self.updateRooms)
+        self.findRoomThread.start()
+
+    def closeEvent(self, a0) -> None:
+        print('fsd')
+        if self.findRoomThread:
+            self.findRoomThread.stop()
 
 class RoomInner(QWidget):
     def __init__(self, parent, winSize=QSize(800, 600), room=None, isOwer=False):
@@ -252,8 +269,26 @@ class RoomInner(QWidget):
         self.user['flag'] = 'none'
         self.user['hero'] = 'google'
         self.users = [self.user]
-
         self.initUI(winSize)
+
+        self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.connected = False
+        if not self.isOwner:
+            self.connected = True
+            try:
+                self.client.connect(self.room[0])
+            except socket.timeout:
+                self.parent().toIntranet()
+                return
+            except OSError:
+                self.parent().toIntranet()
+                return
+            print('enterRoom ok')
+
+            self.clientThread = myThread(target=self.handleServer)
+            self.clientThread.start()
+            requestion = {'type': 'enterroom', 'user': self.user.copy()}
+            self.client.send(zlib.compress(json.dumps(requestion).encode('utf-8')))
 
     def initUI(self, winSize):
         self.setFixedSize(winSize)
@@ -332,6 +367,10 @@ class RoomInner(QWidget):
                         j['flag'] = i.color
                         j['hero'] = comboxs[i1].currentText()
                         break
+        if self.connected:
+            requestion = {'type': 'userupdate',
+                          'user': self.user}
+            self.client.send(zlib.compress(json.dumps(requestion).encode('utf-8')))
 
     def updateRols(self, users):
         self.users = users
@@ -346,17 +385,71 @@ class RoomInner(QWidget):
                         break
         for i1, i in enumerate(self.users):
             for j1, j in enumerate(btns):
-                if j.color == j['flag']:
-                    j.setText(i['name'])
-                    j.id = i['userid']
+                if j.color == i['flag']:
+                    # j.setText(i['name'])
+                    # j.id = i['userid']
+                    self.flagBtns[j1].setText(i['username'])
+                    self.flagBtns[j1].id = i['userid']
                     break
 
+
+    def handleServer(self):
+        while 1:
+            try:
+                response = self.client.recv(3072)
+                response = json.loads(zlib.decompress(response).decode('utf-8'))
+            except (ConnectionResetError, zlib.error):
+                print('direct to find rooms')
+                self.client.close()
+                self.parent().toIntranet()
+                return
+            # except zlib.error:
+            #     self.client.close()
+            #     break
+            if response['type'] == 'userstatus':
+                self.updateRols(response['users'])
+                # print(response['users'])
+            elif response['type'] == 'gamebegin':
+                print('game begin')
+                print('按钮点击失效，更新窗口')
+            elif response['type'] == 'talk':
+                text = self.messageShow.text()
+                name = ':'
+                for i in self.users:
+                    if i['userid'] == response['fromid']:
+                        name = i['username']+':'
+                        break
+                text = text + '\n' + name + response['context']
+                self.messageShow.setText(text)
+                # print(response['context'])
+            print(response)
+
     def publish(self):
+        self.user['userid'] = '0000'  ###%%%%%%%%%
         self.invate.setEnabled(False)
         self.invate.setText('已发布')
+        self.roomServerThread = RoomServer(self.room[1], self.user)
+        self.roomServerThread.start()
+
+        try:
+            self.client.connect(self.room[0])
+        except socket.timeout:
+            self.parent().toIntranet()
+            return
+        except OSError:
+            self.parent().toIntranet()
+            return
+        self.clientThread = myThread(target=self.handleServer)
+        self.clientThread.start()
+        requestion = {'type': 'enterroom', 'user': self.user.copy()}
+        self.client.send(zlib.compress(json.dumps(requestion).encode('utf-8')))
+        self.connected = True
 
     def sendMessage(self):
-        print(self.messageSend.text())
+        # print(self.messageSend.text())
+        if self.connected:
+            requestion = {'type': 'talk', 'fromid':self.user['userid'], 'context':self.messageSend.text()}
+            self.client.send(zlib.compress(json.dumps(requestion).encode('utf-8')))
         self.messageSend.setText('')
 
 class SkimMaps(QWidget):
