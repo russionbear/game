@@ -102,6 +102,7 @@ class TopDirector(QWidget):
             room = tem.ipsAndRooms[room.row()]
         self.setWindowTitle('等待玩家')
         self.fgFrame.deleteLater()
+        # self.fgFrame.close()
         self.fgFrame = RoomInner(self, self.size(), room, isOwner)
         self.fgFrame.show()
 
@@ -161,7 +162,9 @@ class SkimRoom(QWidget):
         self.initUI(winSize)
 
         # self.updateRooms()
-        self.startTimer(5000)
+        self.timer = self.startTimer(5000)
+        # self.timer = QTimer(self)
+        # self.timer.start(5000)
         self.findRoomThread = None
 
     def initUI(self, winSize):
@@ -230,8 +233,10 @@ class SkimRoom(QWidget):
                 self.miniMap.deleteLater()
                 self.miniMap = miniVMap(self.ipsAndRooms[self.roomPoint][1]['map']['map'])
                 self.area.setWidget(self.miniMap)
+        except RuntimeError:
+            pass
         finally:
-            print('finally error')
+            # print('finally error')
             pass
 
     def choosedMap(self, map:QtCore.QModelIndex):
@@ -244,15 +249,20 @@ class SkimRoom(QWidget):
         self.skimMapsView = SkimMaps(self)
 
     def timerEvent(self, a0: 'QTimerEvent') -> None:
+        print('timer for updating rooms')
         if self.findRoomThread:
             self.findRoomThread.stop()
+        del self.findRoomThread
         self.findRoomThread = myThread(target=self.updateRooms)
         self.findRoomThread.start()
 
-    def closeEvent(self, a0) -> None:
-        print('fsd')
+    def deleteLater(self) -> None:
+        print('page for rooms is closed')
+        self.killTimer(self.timer)
         if self.findRoomThread:
             self.findRoomThread.stop()
+        return super(SkimRoom, self).deleteLater()
+
 
 class RoomInner(QWidget):
     def __init__(self, parent, winSize=QSize(800, 600), room=None, isOwer=False):
@@ -329,7 +339,7 @@ class RoomInner(QWidget):
         layout4.addWidget(tem_btn)
 
         layout3 = QBoxLayout(QBoxLayout.TopToBottom)
-        self.messageShow = QTextEdit(self)
+        self.messageShow = QTextEdit('<---  对话框   ---->', self)
         self.messageShow.setReadOnly(True)
         self.messageShow.setLineWrapMode(1)
         self.messageSend = QLineEdit(self)
@@ -392,7 +402,6 @@ class RoomInner(QWidget):
                     self.flagBtns[j1].id = i['userid']
                     break
 
-
     def handleServer(self):
         while 1:
             try:
@@ -413,7 +422,7 @@ class RoomInner(QWidget):
                 print('game begin')
                 print('按钮点击失效，更新窗口')
             elif response['type'] == 'talk':
-                text = self.messageShow.text()
+                text = self.messageShow.toPlainText()
                 name = ':'
                 for i in self.users:
                     if i['userid'] == response['fromid']:
@@ -421,14 +430,14 @@ class RoomInner(QWidget):
                         break
                 text = text + '\n' + name + response['context']
                 self.messageShow.setText(text)
-                # print(response['context'])
+                print(response['context'])
             print(response)
 
     def publish(self):
-        self.user['userid'] = '0000'  ###%%%%%%%%%
+        # self.user['userid'] = '0000'  ###%%%%%%%%%
         self.invate.setEnabled(False)
         self.invate.setText('已发布')
-        self.roomServerThread = RoomServer(self.room[1], self.user)
+        self.roomServerThread = RoomServer(self.room[1], self.user.copy())
         self.roomServerThread.start()
 
         try:
@@ -446,11 +455,23 @@ class RoomInner(QWidget):
         self.connected = True
 
     def sendMessage(self):
-        # print(self.messageSend.text())
+        text = self.messageShow.toPlainText()
+        text = text + '\n' + self.user['username'] + ':' + self.messageSend.text()
+        self.messageShow.setText(text)
         if self.connected:
             requestion = {'type': 'talk', 'fromid':self.user['userid'], 'context':self.messageSend.text()}
             self.client.send(zlib.compress(json.dumps(requestion).encode('utf-8')))
         self.messageSend.setText('')
+
+    def deleteLater(self) -> None:
+        if self.clientThread:
+            self.clientThread.stop()
+        if self.client:
+            self.client.close()
+        if self.roomServerThread:
+            self.roomServerThread.endServer()
+            # self.roomServerThread.stop()
+        return super(RoomInner, self).deleteLater()
 
 class SkimMaps(QWidget):
     def __init__(self, body):

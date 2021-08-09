@@ -50,6 +50,7 @@ class RoomServer(myThread):
         #                   'userid': '123', 'status': 1}
         # self.users = [self.localUser]
         self.localUser = localUser
+        self.localUser['userid'] = '0000' ##%%%%%%%
         self.users = []
         self.contains = len(map['map']['flags'])
         self.canModify = True
@@ -58,11 +59,13 @@ class RoomServer(myThread):
         self.serverSocket = None
         self.serverBind = (LOCAL_IP, BROADCAST_PORT)
         self.handleProcesses = []
+        self.serverThread = None
         self.canEnd = False
         self.isInGame = False
 
     def run(self) -> None:
-        self.buildServer()
+        self.serverThread = myThread(target=self.buildServer)
+        self.serverThread.start()
         while 1:
             if self.canEnd:
                 break
@@ -85,79 +88,82 @@ class RoomServer(myThread):
                     conn.close()
                     continue
             tem_process = myThread(target=self.serverHandle, kwargs={'conn': conn, 'address': address})
-            self.handleProcesses.append(tem_process)
+            self.handleProcesses.append((tem_process, conn))
             tem_process.start()
 
     def serverHandle(self, conn, address):
-        def updateUsers(addr43, new=None):
-            for i1, i in enumerate(self.users):
-                if i['addr'][0] == addr43:
-                    while 1:
-                        if self.canModify:
-                            self.canModify = False
-                            self.users.pop(i1)
-                            if new != None:
-                                self.users.append(new)
-                            self.canModify = True
-                            break
-                    break
-            else:
-                self.users.append(new)
-            info = {'type': 'userstatus', 'users': []}
-            for i in self.users:
-                info['users'].append(i.copy())
-                del info['users'][-1]['conn']
-                # print(i['conn'])
-            self.serverSend(info)
-
-        while 1:
-            try:
-                requstion = conn.recv(1024)
-                requstion = json.loads(zlib.decompress(requstion).decode('utf-8'))
-            except (ConnectionResetError, zlib.error):
-                if not self.isInGame:
-                    updateUsers(address[0])
+        try:
+            def updateUsers(addr43, new=None):
+                for i1, i in enumerate(self.users):
+                    if i['addr'][0] == addr43:
+                        while 1:
+                            if self.canModify:
+                                self.canModify = False
+                                self.users.pop(i1)
+                                if new != None:
+                                    self.users.append(new)
+                                self.canModify = True
+                                break
+                        break
                 else:
-                    while 1:
-                        if self.canModify:
-                            for j1, j in enumerate(self.users):
-                                if j['addr'][0] == address[0]:
-                                    self.users[j1]['status'] = 0
-                                    break
-                            print('更新按钮')
-                            break
-                conn.close()
-                break
-            else:
-                if self.isInGame:
-                    while 1:
-                        if self.canModify:
-                            for j1, j in enumerate(self.users):
-                                if j['addr'][0] == address[0]:
-                                    self.users[j1]['status'] = 1
-                                    self.users[j1]['conn'] = conn
-                                    break
-                            break
+                    self.users.append(new)
+                info = {'type': 'userstatus', 'users': []}
+                for i in self.users:
+                    info['users'].append(i.copy())
+                    del info['users'][-1]['conn']
+                    # print(i['conn'])
+                self.serverSend(info)
+            print('netTool', address)
+            while 1:
+                try:
+                    requstion = conn.recv(1024)
+                    requstion = json.loads(zlib.decompress(requstion).decode('utf-8'))
+                except (ConnectionResetError, zlib.error):
+                    if not self.isInGame:
+                        updateUsers(address[0])
+                    else:
+                        while 1:
+                            if self.canModify:
+                                for j1, j in enumerate(self.users):
+                                    if j['addr'][0] == address[0]:
+                                        self.users[j1]['status'] = 0
+                                        break
+                                print('更新按钮')
+                                break
+                    conn.close()
+                    break
+                else:
+                    if self.isInGame:
+                        while 1:
+                            if self.canModify:
+                                for j1, j in enumerate(self.users):
+                                    if j['addr'][0] == address[0]:
+                                        self.users[j1]['status'] = 1
+                                        self.users[j1]['conn'] = conn
+                                        break
+                                break
 
-            if self.isInGame:
-                pass
-            else:
-                if requstion['type'] == 'findroom':
-                    conn.send(zlib.compress(json.dumps(self.map).encode('utf-8')))
-                elif requstion['type'] == 'enterroom':
-                    requstion['user']['conn'] = conn
-                    requstion['user']['addr'] = address
-                    requstion['user']['status'] = 1
-                    updateUsers(address[0], requstion['user'])
-                    print('更新按钮')
-                elif requstion['type'] == 'userupdate':
-                    requstion['user']['conn'] = conn
-                    requstion['user']['addr'] = address
-                    requstion['user']['status'] = 1
-                    updateUsers(address[0], requstion['user'])
-                elif requstion['type'] == 'talk':
-                    # self.serverSend(requstion, address[0])
-                    self.serverSend(requstion)
+                if self.isInGame:
+                    pass
+                else:
+                    if requstion['type'] == 'findroom':
+                        conn.send(zlib.compress(json.dumps(self.map).encode('utf-8')))
+                    elif requstion['type'] == 'enterroom':
+                        requstion['user']['conn'] = conn
+                        requstion['user']['addr'] = address
+                        requstion['user']['status'] = 1
+                        updateUsers(address[0], requstion['user'])
+                    elif requstion['type'] == 'userupdate':
+                        requstion['user']['conn'] = conn
+                        requstion['user']['addr'] = address
+                        requstion['user']['status'] = 1
+                        updateUsers(address[0], requstion['user'])
+                    elif requstion['type'] == 'talk':
+                        # self.serverSend(requstion, address[0])
+                        self.serverSend(requstion, address[0])
+        finally:
+            conn.close()
+            return
 
     def serverSend(self, command, addressIp=None):
         async def send(i):
@@ -181,10 +187,13 @@ class RoomServer(myThread):
             pass
 
     def endServer(self):
+        self.serverThread.stop()
         if self.serverSocket:
             self.serverSocket.close()
         for i in self.handleProcesses:
-            i.stop()
+            i[0].stop()
+            i[1].close()
+        self.canEnd = True
 
     def beginGame(self):
         # if len(self.users) != self.contains:
