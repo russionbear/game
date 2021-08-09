@@ -43,14 +43,14 @@ LOCK = threading.RLock()
 
 class RoomServer(myThread):
     def __init__(self, map={'type': 'map', 'author': 'hula', 'authorid':'123',
-                            'map': {'name': 'netmap', 'map': [1, 1, 1, 1], 'dw': [], 'dsc': 'just for test'}},
+                            'map': {'name': 'netmap', 'map': [1, 1, 1, 1], 'dw': [], 'dsc': 'just for test', 'flags':['red', 'blue']}},
                  localUser=None, contains=2):
         super(RoomServer, self).__init__()
         self.localUser = {'addr': (LOCAL_IP, BROADCAST_PORT), 'flag': 'none', 'hero': 'google', 'username': 'aaaa',
                           'userid': '123', 'status': 1}
         # self.users = [self.localUser]
         self.users = []
-        self.contains = 2
+        self.contains = len(map['map']['flags'])
         self.canModify = True
         self.map = map
 
@@ -192,7 +192,6 @@ class RoomServer(myThread):
         command = {'type': 'gamebegin'}
         self.serverSend(command)
         self.isInGame = True
-
 
 def findRooms():
     prefix = LOCAL_IP.split('.')

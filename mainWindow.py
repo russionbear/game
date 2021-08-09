@@ -9,9 +9,10 @@ from PyQt5 import QtCore
 import sys, time, functools
 from resource_load import resource
 from map_load import DW, Geo
-from net.netTool import findRooms, enterRoom
+from net.netTool import findRooms, enterRoom, RoomServer, LOCAL_IP, BROADCAST_PORT
 
 Qapp = QApplication(sys.argv)
+
 class TopDirector(QWidget):
     def __init__(self):
         super(TopDirector, self).__init__()
@@ -95,15 +96,21 @@ class TopDirector(QWidget):
         self.fgFrame = SkimRoom(self, self.size())
         self.fgFrame.show()
 
-    def enterRoom(self, room:QtCore.QModelIndex):
-        print(room.row())
-        tem = self.findChild(SkimRoom)
-        self.room = tem.ipsAndRooms[tem.roomPoint]
+    def enterRoom(self, room:QtCore.QModelIndex, isOwner=False):
+        if not isOwner:
+            tem = self.findChild(SkimRoom)
+            room = tem.ipsAndRooms[room.row()]
+        self.setWindowTitle('等待玩家')
+        self.fgFrame.deleteLater()
+        self.fgFrame = RoomInner(self, self.size(), room, isOwner)
+        self.fgFrame.show()
 
     def toCustom(self):
         pass
+
     def toEdit(self):
         pass
+
     def toSetting(self):
         pass
 
@@ -154,7 +161,8 @@ class SkimRoom(QWidget):
         self.initUI(winSize)
 
         self.updateRooms()
-        self.updateRooms()
+        # self.updateRooms()
+
     def initUI(self, winSize):
         self.setFixedSize(winSize)
 
@@ -171,7 +179,7 @@ class SkimRoom(QWidget):
 
         layout3 = QBoxLayout(QBoxLayout.LeftToRight)
         tem_btn = QPushButton('创建房间', self)
-        tem_btn.clicked.connect(functools.partial(self.parent().enterRoom, self.ipsAndRooms[self.roomPoint]))
+        tem_btn.clicked.connect(self.skimMaps)
         layout3.addWidget(tem_btn)
         tem_btn = QPushButton('返回', self)
         tem_btn.clicked.connect(self.parent().toOptions)
@@ -220,14 +228,30 @@ class SkimRoom(QWidget):
             self.miniMap = miniVMap(self.ipsAndRooms[self.roomPoint][1]['map']['map'])
             self.area.setWidget(self.miniMap)
 
+    def choosedMap(self, map:QtCore.QModelIndex):
+        room = (LOCAL_IP, BROADCAST_PORT), {'type': 'map', 'author': resource.userInfo['username'], 'authorid': resource.userInfo['userid'],
+         'map': resource.maps[map.row()]}
+        self.skimMapsView.close()
+        self.parent().enterRoom(room,True)
+
+    def skimMaps(self):
+        self.skimMapsView = SkimMaps(self)
+
 class RoomInner(QWidget):
-    def __init__(self, parent, winSize=QSize(800, 600), room=None):
+    def __init__(self, parent, winSize=QSize(800, 600), room=None, isOwer=False):
         super(RoomInner, self).__init__(parent=parent)
-        self.room = (('192.168.100.9', 1111), {'type': 'map', 'author': 'hula', 'authorid': '123',
-                                               'map': {'name': 'netmap',
-                                                       'map': [[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]],
-                                                       'dw': [], 'dsc': 'just for test'}, 'flags':['red', 'bule']})
-        self.isOwner = False
+        # self.room = (('192.168.100.9', 1111), {'type': 'map', 'author': 'hula', 'authorid': '123',
+        #                                        'map': {'name': 'netmap',
+        #                                                'map': [[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]],
+        #                                                'dw': [], 'dsc': 'just for test', 'flags':['red', 'blue']}})
+        self.room = room
+        #####%%%%%特殊处理
+        self.room[1]['map']['flags'] = ['red', 'blue']
+        self.isOwner = isOwer
+        self.user = resource.userInfo.copy()
+        self.user['flag'] = 'none'
+        self.user['hero'] = 'google'
+        self.users = [self.user]
 
         self.initUI(winSize)
 
@@ -238,49 +262,142 @@ class RoomInner(QWidget):
         self.miniMap = miniVMap(self.area, self.room[1]['map'])
         self.area.setWidget(self.miniMap)
 
+        self.text_dsc = QTextEdit(self.room[1]['map']['dsc'], self)
+        self.text_dsc.setReadOnly(True)
+
+        layout = QFormLayout()
+        heros = resource.findAll({'usage': 'hero', 'action': 'head'})
+
+        self.flagBtns = []
+        for i1, i in enumerate(self.room[1]['map']['flags']):
+            tem_btn = QPushButton('    ', self)
+            tem_btn.setStyleSheet('background-color:'+str(i)+';color:white;')
+            tem_btn.color = i
+            tem_btn.id = None
+            com1 = QComboBox(self)
+            for j in heros:
+                com1.addItem(QIcon(j['pixmap']), j['name'])
+            tem_btn.setFocusPolicy(Qt.ClickFocus)
+            com1.setFocusPolicy(Qt.ClickFocus)
+            tem_btn.clicked.connect(functools.partial(self.choose, i1))
+            com1.currentIndexChanged.connect(functools.partial(self.choose, -1))
+            layout.addRow(tem_btn, com1)
+            self.flagBtns.append(tem_btn)
+
+        layout4 = QBoxLayout(QBoxLayout.LeftToRight)
+        if self.isOwner:
+            self.invate = QPushButton('发布邀请')
+            self.invate.clicked.connect(self.publish)
+            layout4.addWidget(self.invate)
+        tem_btn = QPushButton('返回')
+        tem_btn.clicked.connect(self.parent().toIntranet)
+        layout4.addWidget(tem_btn)
+
+        layout3 = QBoxLayout(QBoxLayout.TopToBottom)
+        self.messageShow = QTextEdit(self)
+        self.messageShow.setReadOnly(True)
+        self.messageShow.setLineWrapMode(1)
+        self.messageSend = QLineEdit(self)
+        self.messageSend.editingFinished.connect(self.sendMessage)
+        layout3.addWidget(self.messageShow)
+        layout3.addWidget(self.messageSend)
+        layout3.addLayout(layout4)
+
+        tlayout = QBoxLayout(QBoxLayout.TopToBottom)
+        layout1 = QBoxLayout(QBoxLayout.LeftToRight)
+        layout2 = QBoxLayout(QBoxLayout.LeftToRight)
+        layout1.addWidget(self.area)
+        layout1.addWidget(self.text_dsc)
+        layout2.addLayout(layout)
+        layout2.addLayout(layout3)
+        tlayout.addLayout(layout1)
+        tlayout.addLayout(layout2)
+        self.setLayout(tlayout)
+
+    def choose(self, data=None):
+        btns = self.flagBtns
+        comboxs = self.findChildren(QComboBox)
+        if data != -1:
+            if self.flagBtns[data].id == None:
+                for i1, i in enumerate(self.flagBtns):
+                    if i.id == self.user['userid']:
+                        self.flagBtns[i1].id = None
+                        self.flagBtns[i1].setText('   ')
+                self.flagBtns[data].id = self.user['userid']
+                self.flagBtns[data].setText(self.user['username'])
+        for i1, i in enumerate(btns):
+            if i.id != None:
+                for j1, j in enumerate(self.users):
+                    if j['userid'] == i.id:
+                        j['flag'] = i.color
+                        j['hero'] = comboxs[i1].currentText()
+                        break
+
+    def updateRols(self, users):
+        self.users = users
+        btns = self.findChildren(QPushButton)[0:len(self.room[1]['map']['flags'])]
+        comboxs = self.findChildren(QComboBox)
+        for i1, i in enumerate(btns):
+            if i.id != None:
+                for j1, j in enumerate(self.users):
+                    if j['userid'] == i.id:
+                        j['flag'] = i.color
+                        j['hero'] = comboxs[i1].currentText()
+                        break
+        for i1, i in enumerate(self.users):
+            for j1, j in enumerate(btns):
+                if j.color == j['flag']:
+                    j.setText(i['name'])
+                    j.id = i['userid']
+                    break
+
+    def publish(self):
+        self.invate.setEnabled(False)
+        self.invate.setText('已发布')
+
+    def sendMessage(self):
+        print(self.messageSend.text())
+        self.messageSend.setText('')
+
+class SkimMaps(QWidget):
+    def __init__(self, body):
+        super(SkimMaps, self).__init__()
+        self.body = body
+        self.initUI()
+        self.setWindowModality(Qt.ApplicationModal)
+        self.setWindowTitle('选择地图')
+        self.show()
+
+    def initUI(self):
+        self.setMinimumHeight(400)
+
+        self.mapList = QListWidget(self)
+        self.mapList.doubleClicked.connect(self.body.choosedMap)
+        for i1, i in enumerate(resource.maps):
+            self.mapList.addItem(QListWidgetItem(i['name']))
+        self.mapList.clicked.connect(self.choose)
+
+        self.area = QScrollArea(self)
+        self.miniMap = miniVMap(self.area)
+        self.area.setWidget(self.miniMap)
+
         self.text_dsc = QTextEdit('空空如也', self)
         self.text_dsc.setReadOnly(True)
 
-        layout = QBoxLayout(QBoxLayout.TopToBottom)
-        for i in self.room[1]['map']['flags']:
-            tem_layout = QBoxLayout(QBoxLayout.LeftToRight)
-            tem_flag = QLabel(self)
-            tem_flag.setStyleSheet('background-color:'+i)
-            tem_btn = QPushButton('', self)
-            com1 =
+        layout = QBoxLayout(QBoxLayout.LeftToRight)
+        layout1 = QBoxLayout(QBoxLayout.TopToBottom)
+        layout1.addWidget(self.area)
+        layout1.addWidget(self.text_dsc)
+        layout.addLayout(layout1)
+        layout.addWidget(self.mapList)
+        self.setLayout(layout)
 
     def choose(self):
-        self.roomPoint = self.roomList.currentRow()
-        self.text_dsc.setText(self.ipsAndRooms[self.roomPoint][1]['map']['dsc'])
+        map = resource.maps[self.mapList.currentRow()]
+        self.text_dsc.setText(map['dsc'])
         self.miniMap.deleteLater()
-        self.miniMap = miniVMap(self.area, self.ipsAndRooms[self.roomPoint][1]['map'])
+        self.miniMap = miniVMap(self.area, map)
         self.area.setWidget(self.miniMap)
-
-    def updateRooms(self):
-        # newData = findRooms()
-        newData = [(('192.168.100.9', 1111), {'type': 'map', 'author': 'hula', 'authorid': '123',
-                       'map': {'name': 'netmap', 'map': [[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]], 'dw': [], 'dsc': 'just for test'}})]
-        if self.roomPoint == -1:
-            selected = None
-        else:
-            selected = self.ipsAndRooms[self.roomPoint]
-        if selected:
-            for i1, i in newData:
-                if i[0][0] == selected[0][0]:
-                    self.roomPoint = i1
-                    break
-        self.ipsAndRooms = newData
-        self.roomList.clear()
-        for i in self.ipsAndRooms:
-            item = QListWidgetItem(i[1]['map']['name']+'\t<'+i[1]['author']+'>')
-            item.roomIp = i[0][0]
-            self.roomList.addItem(item)
-        if self.roomPoint != -1:
-            self.roomList.selectedIndexes(self.roomPoint)
-            self.text_dsc.setText(self.ipsAndRooms[self.roomPoint][1]['map']['dsc'])
-            self.miniMap.deleteLater()
-            self.miniMap = miniVMap(self.ipsAndRooms[self.roomPoint][1]['map']['map'])
-            self.area.setWidget(self.miniMap)
 
 
 if __name__ == "__main__":

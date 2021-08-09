@@ -14,6 +14,7 @@ BasicDataPath = 'configure/basic_info.json'
 RecordsPath = 'configure/records.json'
 MapsPath = 'configure/maps.json'
 HafumanPath = 'configure/hafuman.json'
+UserPath = 'configure/userInfo.json'
 
 Qapp = QApplication(sys.argv)
 
@@ -23,10 +24,12 @@ class Resource():
         self.hafumanRoot = HafumanPath
         self.basicInfopath = BasicDataPath
         self.recordsPath = RecordsPath
+        self.userPath = UserPath
         self.data = []
         self.hafuman = []
         self.maps = []
         self.records = []
+        self.userInfo = None
 
         self.readImageData()
 
@@ -50,6 +53,9 @@ class Resource():
         # print(self.basicData)
 
         self.readRecord()
+
+        # self.makeUser()
+        self.readUserInfo()
 
     def readImageData(self):
         '''for developer'''
@@ -239,7 +245,17 @@ class Resource():
             self.records = json.load(f)
             # return json.dump(f)
 
+    def makeUser(self):
+        user = {'username':'bear', 'userid':'123', 'signal':'i can eat the stone without my body injured'}
+        with open(self.userPath, 'w') as f:
+            json.dump(user, f)
+
+    def readUserInfo(self):
+        with open(self.userPath, 'r') as f:
+            self.userInfo = json.load(f)
+
 resource = Resource()
+# print(resource.userInfo)
 
 # print(resource.makeMap('jjj'))
 
