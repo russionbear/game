@@ -5,11 +5,10 @@
 # @Author    :russionbear
 
 from PyQt5.Qt import *
-from PyQt5 import QtCore
 from map_load import VMap
-from edit_tool import EditTool
-from new_map_win import newWin
-from skim_map_win import SkimWin
+from mapEditTool.edit_tool import EditTool
+from mapEditTool.new_map_win import newWin
+from mapEditTool.skim_map_win import SkimWin
 from resource_load import resource
 import sys
 
