@@ -12,6 +12,8 @@ from mainWindow import TopDirector
 user1 = TopDirector()
 
 user1.show()
+user2 = TopDirector()
+user2.show()
 
 sys.exit(Qapp.exec_())
 

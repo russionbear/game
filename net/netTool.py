@@ -227,7 +227,7 @@ def findRooms():
             return
         response = json.loads(zlib.decompress(response).decode('utf-8'))
         client.close()
-        ips.append((ip, response))
+        ips.append(((ip, BROADCAST_PORT), response))
     processes = []
     for i in range(1, 255):
         tt = myThread(target=ping, kwargs={'ii':i})

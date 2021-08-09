@@ -200,35 +200,41 @@ class SkimRoom(QWidget):
         self.setLayout(layout)
 
     def choose(self):
-        self.roomPoint = self.roomList.currentRow()
-        self.text_dsc.setText(self.ipsAndRooms[self.roomPoint][1]['map']['dsc'])
-        self.miniMap.deleteLater()
-        self.miniMap = miniVMap(self.area, self.ipsAndRooms[self.roomPoint][1]['map'])
-        self.area.setWidget(self.miniMap)
+        try:
+            self.roomPoint = self.roomList.currentRow()
+            self.text_dsc.setText(self.ipsAndRooms[self.roomPoint][1]['map']['dsc'])
+            self.miniMap.deleteLater()
+            self.miniMap = miniVMap(self.area, self.ipsAndRooms[self.roomPoint][1]['map'])
+            self.area.setWidget(self.miniMap)
+        finally:
+            pass
 
     def updateRooms(self):
         try:
             newData = findRooms()
             # newData = [(('192.168.100.9', 1111), {'type': 'map', 'author': 'hula', 'authorid': '123',
             #                'map': {'name': 'netmap', 'map': [[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]], 'dw': [], 'dsc': 'just for test'}})]
-            if self.roomPoint == -1:
-                selected = None
-            else:
-                selected = self.ipsAndRooms[self.roomPoint]
-            if selected:
-                print(selected)
-                for i1, i in newData:
-                    if i[0][0] == selected[0][0]:
-                        self.roomPoint = i1
-                        break
+            # if self.roomPoint == -1:
+            #     selected = None
+            # else:
+            #     selected = self.ipsAndRooms[self.roomPoint]
+            # if selected:
+            #     for i1, i in enumerate(newData):
+            #         # print(i, '\n', selected)
+            #         if i[0][0] == selected[0][0]:
+            #             self.roomPoint = i1
+            #             break
             self.ipsAndRooms = newData
             self.roomList.clear()
             for i in self.ipsAndRooms:
                 item = QListWidgetItem(i[1]['map']['name']+'\t<'+i[1]['author']+'>')
                 item.roomIp = i[0][0]
                 self.roomList.addItem(item)
+                # print(self.roomPoint)
             if self.roomPoint != -1:
-                self.roomList.selectedIndexes(self.roomPoint)
+                # self.roomList.selectedIndexes(self.roomPoint)
+                # self.roomList.setSel
+                self.roomList.item(self.roomPoint).setSelected(True)
                 self.text_dsc.setText(self.ipsAndRooms[self.roomPoint][1]['map']['dsc'])
                 self.miniMap.deleteLater()
                 self.miniMap = miniVMap(self.ipsAndRooms[self.roomPoint][1]['map']['map'])
@@ -293,7 +299,6 @@ class RoomInner(QWidget):
             except OSError:
                 self.parent().toIntranet()
                 return
-            print('enterRoom ok')
 
             self.clientThread = myThread(target=self.handleServer)
             self.clientThread.start()
@@ -407,14 +412,15 @@ class RoomInner(QWidget):
             try:
                 response = self.client.recv(3072)
                 response = json.loads(zlib.decompress(response).decode('utf-8'))
-            except (ConnectionResetError, zlib.error):
-                print('direct to find rooms')
-                self.client.close()
-                self.parent().toIntranet()
-                return
-            # except zlib.error:
+            # except (ConnectionResetError, zlib.error):
+            #     print('direct to find rooms')
             #     self.client.close()
-            #     break
+            #     self.parent().toIntranet()
+            #     return
+            except zlib.error:
+                print('error 2345')
+                self.client.close()
+                break
             if response['type'] == 'userstatus':
                 self.updateRols(response['users'])
                 # print(response['users'])
@@ -430,7 +436,7 @@ class RoomInner(QWidget):
                         break
                 text = text + '\n' + name + response['context']
                 self.messageShow.setText(text)
-                print(response['context'])
+            #     print(response['context'])
             print(response)
 
     def publish(self):
