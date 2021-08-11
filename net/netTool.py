@@ -42,19 +42,21 @@ LOCK = threading.RLock()
 
 
 class RoomServer(myThread):
-    def __init__(self, map={'type': 'map', 'author': 'hula', 'authorid':'123',
-                            'map': {'name': 'netmap', 'map': [1, 1, 1, 1], 'dw': [], 'dsc': 'just for test', 'flags':['red', 'blue']}},
-                 localUser=None):
-        super(RoomServer, self).__init__()
+    # def __init__(self, map={'type': 'map', 'author': 'hula', 'authorid':'123',
+    #                         'map': {'name': 'netmap', 'map': [1, 1, 1, 1], 'dw': [], 'dsc': 'just for test', 'flags':['red', 'blue']}},
+    #              localUser=None):
         # self.localUser = {'addr': (LOCAL_IP, BROADCAST_PORT), 'flag': 'none', 'hero': 'google', 'username': 'aaaa',
         #                   'userid': '123', 'status': 1}
         # self.users = [self.localUser]
-        self.localUser = localUser
-        self.localUser['userid'] = '0000' ##%%%%%%%
+    def __init__(self):
+        super(RoomServer, self).__init__()
+        self.ownerId = None
+        # self.localUser['userid'] = '0000' ##%%%%%%%
         self.users = []
-        self.contains = len(map['map']['flags'])
+        # self.contains = len(map['map']['flags'])
+        self.contains = 0
         self.canModify = True
-        self.map = map
+        self.map = {}
 
         self.serverSocket = None
         self.serverBind = (LOCAL_IP, BROADCAST_PORT)
@@ -63,30 +65,17 @@ class RoomServer(myThread):
         self.canEnd = False
         self.isInGame = False
 
-    def run(self) -> None:
-        self.serverThread = myThread(target=self.buildServer)
-        self.serverThread.start()
-        while 1:
-            if self.canEnd:
-                break
 
-    def buildServer(self):
         server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.serverSocket = server_socket
         server_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         server_socket.bind(self.serverBind)
         server_socket.listen(9)
+
+
+    def run(self) -> None:
         while True:
-            conn, address = server_socket.accept()
-            if self.contains <= len(self.users):
-                conn.close()
-            if self.isInGame:
-                for i in self.users:
-                    if i['addr'][0] == address[0]:
-                        break
-                else:
-                    conn.close()
-                    continue
+            conn, address = self.serverSocket.accept()
             tem_process = myThread(target=self.serverHandle, kwargs={'conn': conn, 'address': address})
             self.handleProcesses.append((tem_process, conn))
             tem_process.start()
@@ -95,7 +84,7 @@ class RoomServer(myThread):
         try:
             def updateUsers(addr43, new=None):
                 for i1, i in enumerate(self.users):
-                    if i['addr'][0] == addr43:
+                    if i['addr'][0] == addr43[0] and i['addr'][1] == addr43[1]:
                         while 1:
                             if self.canModify:
                                 self.canModify = False
@@ -106,64 +95,69 @@ class RoomServer(myThread):
                                 break
                         break
                 else:
-                    self.users.append(new)
+                    if new != None:
+                        self.users.append(new)
                 info = {'type': 'userstatus', 'users': []}
                 for i in self.users:
                     info['users'].append(i.copy())
                     del info['users'][-1]['conn']
-                    # print(i['conn'])
                 self.serverSend(info)
-            print('netTool', address)
             while 1:
                 try:
-                    requstion = conn.recv(1024)
+                    requstion = conn.recv(3072)
                     requstion = json.loads(zlib.decompress(requstion).decode('utf-8'))
                 except (ConnectionResetError, zlib.error):
                     if not self.isInGame:
-                        updateUsers(address[0])
+                        updateUsers(address)
                     else:
                         while 1:
                             if self.canModify:
                                 for j1, j in enumerate(self.users):
-                                    if j['addr'][0] == address[0]:
+                                    if j['addr'][0] == address[0] and j['addr'][1] == address[1]:
                                         self.users[j1]['status'] = 0
                                         break
-                                print('更新按钮')
+                                print('玩家重新连接')
                                 break
+                    print('没开发', requstion)
                     conn.close()
                     break
-                else:
-                    if self.isInGame:
-                        while 1:
-                            if self.canModify:
-                                for j1, j in enumerate(self.users):
-                                    if j['addr'][0] == address[0]:
-                                        self.users[j1]['status'] = 1
-                                        self.users[j1]['conn'] = conn
-                                        break
-                                break
 
                 if self.isInGame:
                     pass
                 else:
-                    if requstion['type'] == 'findroom':
-                        conn.send(zlib.compress(json.dumps(self.map).encode('utf-8')))
+                    if requstion['type'] == 'buildserver':
+                        requstion['user']['addr'] = address
+                        requstion['user']['conn'] = conn
+                        requstion['user']['status'] = 1
+                        self.users.append(requstion['user'])
+                        self.contains = len(requstion['map']['flags'])
+                        self.ownerId = requstion['user']['userid']
+                        self.map['map'] = requstion['map']
+                        self.map['author'] = requstion['user']['username']
+                        self.map['authorid'] = requstion['user']['userid']
+                        self.map['type'] = 'map'
+                        updateUsers(address, requstion['user'])
+                    elif requstion['type'] == 'findroom':
+                        if self.contains > len(self.users):
+                            conn.send(zlib.compress(json.dumps(self.map).encode('utf-8')))
+                        conn.close()
+                        return
                     elif requstion['type'] == 'enterroom':
                         requstion['user']['conn'] = conn
                         requstion['user']['addr'] = address
                         requstion['user']['status'] = 1
-                        updateUsers(address[0], requstion['user'])
+                        updateUsers(address, requstion['user'])
                     elif requstion['type'] == 'userupdate':
                         requstion['user']['conn'] = conn
                         requstion['user']['addr'] = address
                         requstion['user']['status'] = 1
-                        updateUsers(address[0], requstion['user'])
+                        updateUsers(address, requstion['user'])
                     elif requstion['type'] == 'talk':
-                        # self.serverSend(requstion, address[0])
-                        self.serverSend(requstion, address[0])
+                        self.serverSend(requstion)
         finally:
-            conn.close()
-            return
+            # conn.close()
+            # return
+            pass
 
     def serverSend(self, command, addressIp=None):
         async def send(i):
@@ -178,22 +172,21 @@ class RoomServer(myThread):
         loop = asyncio.get_event_loop()
 
         for i1, i in enumerate(self.users):
-            if i['addr'][0] == addressIp:
-                continue
+            if addressIp != None:
+                if i['addr'][0] == addressIp[0] and i['addr'][1] == addressIp[1]:
+                    continue
             tasks.append(asyncio.ensure_future(send(i1)))
         try:
             loop.run_until_complete(asyncio.wait(tasks))
         except ValueError:
             pass
 
-    def endServer(self):
-        self.serverThread.stop()
-        if self.serverSocket:
-            self.serverSocket.close()
+    def stop(self):
+        print('s stop')
+        super(RoomServer, self).stop()
         for i in self.handleProcesses:
             i[0].stop()
             i[1].close()
-        self.canEnd = True
 
     def beginGame(self):
         # if len(self.users) != self.contains:
@@ -222,11 +215,10 @@ def findRooms():
         client.send(zlib.compress(json.dumps(requstion).encode('utf-8')))
         try:
             response = client.recv(3072)
-        except:
             client.close()
+        except:
             return
         response = json.loads(zlib.decompress(response).decode('utf-8'))
-        client.close()
         ips.append(((ip, BROADCAST_PORT), response))
     processes = []
     for i in range(1, 255):

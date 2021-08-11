@@ -17,6 +17,7 @@ class TopDirector(QWidget):
     def __init__(self):
         super(TopDirector, self).__init__()
         self.initUI()
+        self.server = None
 
     def initUI(self):
         bgUrl = ''
@@ -97,13 +98,15 @@ class TopDirector(QWidget):
         self.fgFrame.show()
 
     def enterRoom(self, room:QtCore.QModelIndex, isOwner=False):
-        if not isOwner:
-            tem = self.findChild(SkimRoom)
-            room = tem.ipsAndRooms[room.row()]
+        # if not isOwner:
+        #     tem = self.findChild(SkimRoom)
+        #     room = tem.ipsAndRooms[room.row()]
         self.setWindowTitle('等待玩家')
         self.fgFrame.deleteLater()
-        # self.fgFrame.close()
-        self.fgFrame = RoomInner(self, self.size(), room, isOwner)
+        if isOwner:
+            self.fgFrame = RoomOwner(self, self.size(), room)
+        else:
+            self.fgFrame = RoomInner(self, self.size(), room, isOwner)
         self.fgFrame.show()
 
     def toCustom(self):
@@ -171,7 +174,7 @@ class SkimRoom(QWidget):
         self.setFixedSize(winSize)
 
         self.roomList = QListWidget(self)
-        self.roomList.doubleClicked.connect(self.parent().enterRoom)
+        self.roomList.doubleClicked.connect(self.letParentER)
         self.roomList.clicked.connect(self.choose)
 
         self.area = QScrollArea(self)
@@ -201,12 +204,15 @@ class SkimRoom(QWidget):
 
     def choose(self):
         try:
+            if self.roomPoint == self.roomList.currentRow():
+                return
             self.roomPoint = self.roomList.currentRow()
             self.text_dsc.setText(self.ipsAndRooms[self.roomPoint][1]['map']['dsc'])
             self.miniMap.deleteLater()
             self.miniMap = miniVMap(self.area, self.ipsAndRooms[self.roomPoint][1]['map'])
             self.area.setWidget(self.miniMap)
         finally:
+            print('choose error')
             pass
 
     def updateRooms(self):
@@ -231,18 +237,18 @@ class SkimRoom(QWidget):
                 item.roomIp = i[0][0]
                 self.roomList.addItem(item)
                 # print(self.roomPoint)
-            if self.roomPoint != -1:
+            # if self.roomPoint != -1:
                 # self.roomList.selectedIndexes(self.roomPoint)
                 # self.roomList.setSel
-                self.roomList.item(self.roomPoint).setSelected(True)
-                self.text_dsc.setText(self.ipsAndRooms[self.roomPoint][1]['map']['dsc'])
-                self.miniMap.deleteLater()
-                self.miniMap = miniVMap(self.ipsAndRooms[self.roomPoint][1]['map']['map'])
-                self.area.setWidget(self.miniMap)
+                # self.roomList.item(self.roomPoint).setSelected(True)
+                # self.text_dsc.setText(self.ipsAndRooms[self.roomPoint][1]['map']['dsc'])
+                # self.miniMap.deleteLater()
+                # self.miniMap = miniVMap(self.ipsAndRooms[self.roomPoint][1]['map']['map'])
+                # self.area.setWidget(self.miniMap)
         except RuntimeError:
             pass
         finally:
-            # print('finally error')
+            print('finally error')
             pass
 
     def choosedMap(self, map:QtCore.QModelIndex):
@@ -269,6 +275,11 @@ class SkimRoom(QWidget):
             self.findRoomThread.stop()
         return super(SkimRoom, self).deleteLater()
 
+    def letParentER(self, index):
+        room = self.ipsAndRooms[index.row()]
+        parent = self.parent()
+        self.deleteLater()
+        parent.enterRoom(room, False)
 
 class RoomInner(QWidget):
     def __init__(self, parent, winSize=QSize(800, 600), room=None, isOwer=False):
@@ -279,7 +290,7 @@ class RoomInner(QWidget):
         #                                                'dw': [], 'dsc': 'just for test', 'flags':['red', 'blue']}})
         self.room = room
         #####%%%%%特殊处理
-        self.room[1]['map']['flags'] = ['red', 'blue']
+        self.room[1]['map']['flags'] = ['red', 'blue', 'yellow']
         self.isOwner = isOwer
         self.user = resource.userInfo.copy()
         self.user['flag'] = 'none'
@@ -288,20 +299,28 @@ class RoomInner(QWidget):
         self.initUI(winSize)
 
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.client.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.clientThread = None
+        self.roomServerThread = None
         self.connected = False
         if not self.isOwner:
+            self.clientThread = myThread(target=self.handleServer)
+            self.clientThread.start()
+
             self.connected = True
             try:
                 self.client.connect(self.room[0])
             except socket.timeout:
                 self.parent().toIntranet()
+                self.deleteLater()
+                print('c herer1111')
                 return
             except OSError:
+                print('c herer')
                 self.parent().toIntranet()
+                self.deleteLater()
                 return
 
-            self.clientThread = myThread(target=self.handleServer)
-            self.clientThread.start()
             requestion = {'type': 'enterroom', 'user': self.user.copy()}
             self.client.send(zlib.compress(json.dumps(requestion).encode('utf-8')))
 
@@ -372,7 +391,7 @@ class RoomInner(QWidget):
                 for i1, i in enumerate(self.flagBtns):
                     if i.id == self.user['userid']:
                         self.flagBtns[i1].id = None
-                        self.flagBtns[i1].setText('   ')
+                        self.flagBtns[i1].setText('    ')
                 self.flagBtns[data].id = self.user['userid']
                 self.flagBtns[data].setText(self.user['username'])
         for i1, i in enumerate(btns):
@@ -392,12 +411,15 @@ class RoomInner(QWidget):
         btns = self.findChildren(QPushButton)[0:len(self.room[1]['map']['flags'])]
         comboxs = self.findChildren(QComboBox)
         for i1, i in enumerate(btns):
-            if i.id != None:
-                for j1, j in enumerate(self.users):
-                    if j['userid'] == i.id:
-                        j['flag'] = i.color
-                        j['hero'] = comboxs[i1].currentText()
-                        break
+            i.id = None
+            i.setText('    ')
+        # for i1, i in enumerate(btns):
+        #     if i.id != None:
+        #         for j1, j in enumerate(self.users):
+        #             if j['userid'] == i.id:
+        #                 j['flag'] = i.color
+        #                 j['hero'] = comboxs[i1].currentText()
+        #                 break
         for i1, i in enumerate(self.users):
             for j1, j in enumerate(btns):
                 if j.color == i['flag']:
@@ -405,6 +427,7 @@ class RoomInner(QWidget):
                     # j.id = i['userid']
                     self.flagBtns[j1].setText(i['username'])
                     self.flagBtns[j1].id = i['userid']
+                    comboxs[j1].setCurrentText(i['hero'])
                     break
 
     def handleServer(self):
@@ -412,15 +435,19 @@ class RoomInner(QWidget):
             try:
                 response = self.client.recv(3072)
                 response = json.loads(zlib.decompress(response).decode('utf-8'))
+                print(self.user['username'], '2345 ', response)
             # except (ConnectionResetError, zlib.error):
             #     print('direct to find rooms')
             #     self.client.close()
             #     self.parent().toIntranet()
             #     return
-            except zlib.error:
+            except (zlib.error):
                 print('error 2345')
                 self.client.close()
                 break
+            # if response['type'] == 'roomfull':
+            #     self.parent().toIntranet()
+            #     # return
             if response['type'] == 'userstatus':
                 self.updateRols(response['users'])
                 # print(response['users'])
@@ -437,10 +464,11 @@ class RoomInner(QWidget):
                 text = text + '\n' + name + response['context']
                 self.messageShow.setText(text)
             #     print(response['context'])
-            print(response)
+            print('c ', response)
 
     def publish(self):
-        # self.user['userid'] = '0000'  ###%%%%%%%%%
+        self.user['userid'] = '0000'  ###%%%%%%%%%
+        self.user['username'] = 'polar'
         self.invate.setEnabled(False)
         self.invate.setText('已发布')
         self.roomServerThread = RoomServer(self.room[1], self.user.copy())
@@ -449,9 +477,11 @@ class RoomInner(QWidget):
         try:
             self.client.connect(self.room[0])
         except socket.timeout:
+            self.roomServerThread.stop()
             self.parent().toIntranet()
             return
         except OSError:
+            self.roomServerThread.stop()
             self.parent().toIntranet()
             return
         self.clientThread = myThread(target=self.handleServer)
@@ -475,9 +505,222 @@ class RoomInner(QWidget):
         if self.client:
             self.client.close()
         if self.roomServerThread:
-            self.roomServerThread.endServer()
-            # self.roomServerThread.stop()
+            # self.roomServerThread.endServer()
+            self.roomServerThread.stop()
         return super(RoomInner, self).deleteLater()
+
+class RoomOwner(QWidget):
+    def __init__(self, parent, winSize=QSize(800, 600), room=None):
+        super(RoomOwner, self).__init__(parent=parent)
+        # self.room = (('192.168.100.9', 1111), {'type': 'map', 'author': 'hula', 'authorid': '123',
+        #                                        'map': {'name': 'netmap',
+        #                                                'map': [[1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1], [1, 1, 1, 1]],
+        #                                                'dw': [], 'dsc': 'just for test', 'flags':['red', 'blue']}})
+        self.room = room
+        #####%%%%%特殊处理
+        self.room[1]['map']['flags'] = ['red', 'blue', 'yellow']
+        self.user = resource.userInfo.copy()
+        self.user['flag'] = 'none'
+        self.user['hero'] = 'google'
+        self.users = [self.user]
+        self.initUI(winSize)
+
+        self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.client.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        self.clientThread = None
+        self.roomServerThread = None
+        self.connected = False
+
+
+
+    def initUI(self, winSize):
+        self.setFixedSize(winSize)
+
+        self.area = QScrollArea(self)
+        self.miniMap = miniVMap(self.area, self.room[1]['map'])
+        self.area.setWidget(self.miniMap)
+
+        self.text_dsc = QTextEdit(self.room[1]['map']['dsc'], self)
+        self.text_dsc.setReadOnly(True)
+
+        layout = QFormLayout()
+        heros = resource.findAll({'usage': 'hero', 'action': 'head'})
+
+        self.flagBtns = []
+        for i1, i in enumerate(self.room[1]['map']['flags']):
+            tem_btn = QPushButton('    ', self)
+            tem_btn.setStyleSheet('background-color:'+str(i)+';color:white;')
+            tem_btn.color = i
+            tem_btn.id = None
+            com1 = QComboBox(self)
+            for j in heros:
+                com1.addItem(QIcon(j['pixmap']), j['name'])
+            tem_btn.setFocusPolicy(Qt.ClickFocus)
+            com1.setFocusPolicy(Qt.ClickFocus)
+            tem_btn.clicked.connect(functools.partial(self.choose, i1))
+            com1.currentIndexChanged.connect(functools.partial(self.choose, -1))
+            layout.addRow(tem_btn, com1)
+            self.flagBtns.append(tem_btn)
+
+        layout4 = QBoxLayout(QBoxLayout.LeftToRight)
+        self.invate = QPushButton('发布邀请')
+        self.invate.clicked.connect(self.publish)
+        layout4.addWidget(self.invate)
+        tem_btn = QPushButton('返回')
+        tem_btn.clicked.connect(self.parent().toIntranet)
+        layout4.addWidget(tem_btn)
+
+        layout3 = QBoxLayout(QBoxLayout.TopToBottom)
+        self.messageShow = QTextEdit(self)
+        self.messageShow.setPlainText('\t\t<---  对话框   ---->')
+        self.messageShow.setReadOnly(True)
+        self.messageShow.setLineWrapMode(1)
+        self.messageSend = QLineEdit(self)
+        self.messageSend.editingFinished.connect(self.sendMessage)
+        layout3.addWidget(self.messageShow)
+        layout3.addWidget(self.messageSend)
+        layout3.addLayout(layout4)
+
+        tlayout = QBoxLayout(QBoxLayout.TopToBottom)
+        layout1 = QBoxLayout(QBoxLayout.LeftToRight)
+        layout2 = QBoxLayout(QBoxLayout.LeftToRight)
+        layout1.addWidget(self.area)
+        layout1.addWidget(self.text_dsc)
+        layout2.addLayout(layout)
+        layout2.addLayout(layout3)
+        tlayout.addLayout(layout1)
+        tlayout.addLayout(layout2)
+        self.setLayout(tlayout)
+
+    def choose(self, data=None):
+        btns = self.flagBtns
+        comboxs = self.findChildren(QComboBox)
+        if data != -1:
+            if self.flagBtns[data].id == None:
+                for i1, i in enumerate(self.flagBtns):
+                    if i.id == self.user['userid']:
+                        self.flagBtns[i1].id = None
+                        self.flagBtns[i1].setText('    ')
+                self.flagBtns[data].id = self.user['userid']
+                self.flagBtns[data].setText(self.user['username'])
+        for i1, i in enumerate(btns):
+            if i.id != None:
+                for j1, j in enumerate(self.users):
+                    if j['userid'] == i.id:
+                        j['flag'] = i.color
+                        j['hero'] = comboxs[i1].currentText()
+                        break
+        if self.connected:
+            requestion = {'type': 'userupdate',
+                          'user': self.user}
+            self.client.send(zlib.compress(json.dumps(requestion).encode('utf-8')))
+
+    def updateRols(self, users):
+        self.users = users
+        btns = self.findChildren(QPushButton)[0:len(self.room[1]['map']['flags'])]
+        comboxs = self.findChildren(QComboBox)
+        for i1, i in enumerate(btns):
+            i.id = None
+            i.setText('    ')
+
+        for i1, i in enumerate(self.users):
+            for j1, j in enumerate(btns):
+                if j.color == i['flag']:
+                    self.flagBtns[j1].setText(i['username'])
+                    self.flagBtns[j1].id = i['userid']
+                    comboxs[j1].setCurrentText(i['hero'])
+                    break
+
+    def handleServer(self):
+        # time.sleep(0.4)
+        while 1:
+            try:
+                response = self.client.recv(3072)
+                response = json.loads(zlib.decompress(response).decode('utf-8'))
+                print(self.user['username'], 'recived, data:', response)
+            except OSError:
+                print('contine')
+                continue
+            except (zlib.error):
+                print('zlib error')
+                self.client.close()
+                break
+            print('here00000')
+            if response['type'] == 'userstatus':
+                self.updateRols(response['users'])
+                # print(response['users'])
+            elif response['type'] == 'gamebegin':
+                print('game begin')
+                print('按钮点击失效，更新窗口')
+            elif response['type'] == 'talk':
+                text = self.messageShow.toPlainText()
+                name = ':'
+                for i in self.users:
+                    if i['userid'] == response['fromid']:
+                        name = i['username']+':'
+                        break
+                text = text + '\n' + name + response['context']
+                sendEvent = TextEditEvent(text)
+                QCoreApplication.postEvent(self, sendEvent)
+
+
+    def publish(self):
+        self.user['userid'] = '0000'  ###%%%%%%%%%
+        self.user['username'] = 'polar'
+        self.invate.setEnabled(False)
+        self.invate.setText('已发布')
+        self.parent().server = RoomServer()
+        # self.roomServerThread = RoomServer(self.room[1], self.user.copy())
+
+        self.clientThread = myThread(target=self.handleServer)
+        self.parent().server.start()
+        self.clientThread.start()
+        try:
+            self.client.connect(self.room[0])
+        except socket.timeout:
+            self.parent().toIntranet()
+            return
+        except OSError:
+            self.parent().toIntranet()
+            return
+        self.connected = True
+        print('connect ok')
+        requestion = {'type': 'buildserver', 'user': self.user.copy(), 'map':self.room[1]['map']}
+        self.client.send(zlib.compress(json.dumps(requestion).encode('utf-8')))
+        # requestion = {'type': 'enterroom', 'user': self.user.copy()}
+        # self.client.send(zlib.compress(json.dumps(requestion).encode('utf-8')))
+
+    def sendMessage(self):
+        if self.connected:
+            if self.messageSend.text() == '':
+                return
+            requestion = {'type': 'talk', 'fromid':self.user['userid'], 'context':self.messageSend.text()}
+            self.client.send(zlib.compress(json.dumps(requestion).encode('utf-8')))
+        self.messageSend.setText('')
+
+    def deleteLater(self) -> None:
+        if self.clientThread:
+            self.clientThread.stop()
+        if self.client:
+            self.client.close()
+        if self.roomServerThread:
+            # self.roomServerThread.endServer()
+            self.roomServerThread.stop()
+        return super(RoomInner, self).deleteLater()
+
+    def event(self, a0: QtCore.QEvent) -> bool:
+        if a0.type() == TextEditEvent.typeId:
+            self.messageShow.setText(a0.string)
+            a0.accept()
+            return True
+        return super(RoomOwner, self).event(a0)
+
+
+class TextEditEvent(QEvent):
+    typeId = QEvent.registerEventType()
+    def __init__(self, string):
+        super(TextEditEvent, self).__init__(TextEditEvent.typeId)
+        self.string = string
 
 class SkimMaps(QWidget):
     def __init__(self, body):
@@ -521,6 +764,8 @@ class SkimMaps(QWidget):
 
 
 if __name__ == "__main__":
-    window = TopDirector()
-    window.show()
+    user1 = TopDirector()
+    user1.show()
+    # user2 = TopDirector()
+    # user2.show()
     sys.exit(Qapp.exec_())
