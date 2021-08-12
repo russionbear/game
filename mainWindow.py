@@ -9,16 +9,25 @@ from PyQt5 import QtCore
 import sys, time, functools, socket, json, zlib
 from resource_load import resource
 from map_load import DW, Geo
-from net.netTool import findRooms, enterRoom, RoomServer, LOCAL_IP, BROADCAST_PORT, myThread
+from tmap_load import TMap
+from net.netTool import findRooms, enterRoom, RoomServer, LOCAL_IP, BROADCAST_PORT, myThread, ROOMSERVER
 
-ROOMSERVER = None
 Qapp = QApplication(sys.argv)
+
+class uiToGameEvent(QEvent):
+    idType = QEvent.registerEventType()
+    def __init__(self, mapName, users, user, conn):
+        super(uiToGameEvent, self).__init__(uiToGameEvent.idType)
+        self.mapName = mapName
+        self.users = users
+        self.user = user
+        self.conn = conn
 
 class TopDirector(QWidget):
     def __init__(self):
         super(TopDirector, self).__init__()
-        self.initUI()
         self.server = None
+        self.initUI()
 
     def initUI(self):
         bgUrl = ''
@@ -35,7 +44,7 @@ class TopDirector(QWidget):
         bgImage_.move(0, pixmap.height())
         # self.setFixedSize(pixmap.size())
         self.resize(pixmap.size())
-        self.startTimer(20)
+        self.timer = self.startTimer(20)
 
         # self.toBegin()
         # self.toOptions()
@@ -77,7 +86,7 @@ class TopDirector(QWidget):
         self.fgFrame = QFrame(self)
         self.fgFrame.resize(self.size())
         btns_text = ['战役', '局域网', '自定义', '编辑', '设置', '返回']
-        btns_backMethod = [self.toBegin, self.toIntranet, self.toCustom, self.toEdit, self.toSetting, self.toBegin]
+        btns_backMethod = [self.toBattle, self.toIntranet, self.toCustom, self.toEdit, self.toSetting, self.toBegin]
         layout = QBoxLayout(QBoxLayout.TopToBottom)
         layout.setAlignment(QtCore.Qt.AlignHCenter)
         for i1, i in enumerate(btns_text):
@@ -93,8 +102,8 @@ class TopDirector(QWidget):
         pass
 
     def toIntranet(self):
-        if ROOMSERVER:
-            ROOMSERVER.stop()
+        if self.server:
+            self.server.stop()
         self.setWindowTitle('选择房间')
         self.fgFrame.deleteLater()
         self.fgFrame = SkimRoom(self, self.size())
@@ -120,6 +129,26 @@ class TopDirector(QWidget):
 
     def toSetting(self):
         pass
+
+    def toGame(self, mapName, users, user, conn):
+        self.fgFrame.deleteLater()
+        # hereusers = [{'flag': 'red', 'enemy': ['blue'], 'action': 'right', 'command_bg': '会战', 'command': '消灭敌方', \
+        #               'outcome': 0, 'money': 99999, 'hero': 'google', 'header_loc': None, 'canBeGua': False,
+        #               'bout': 1,
+        #               'exp': 2}, \
+        #              {'flag': 'blue', 'enemy': ['red'], 'action': 'left', 'command_bg': '会战', 'command': '消灭敌方', \
+        #               'outcome': 0, 'money': 0, 'hero': 'warhton', 'header_loc': None, 'canBeGua': False, 'bout': 1,
+        #               'exp': 2}]
+        self.fgFrame = TMap(mapName, users, user, conn)
+        self.fgFrame.show()
+        self.killTimer(self.timer)
+        self.hide()
+
+    def event(self, a0: QtCore.QEvent) -> bool:
+        if a0.type() == uiToGameEvent.idType:
+            self.toGame(a0.mapName, a0.users, a0.user, a0.conn)
+            return True
+        return super(TopDirector, self).event(a0)
 
 class miniVMap(QWidget):
     def __init__(self, parent, map=None):
@@ -446,9 +475,6 @@ class RoomClient(QWidget):
             if response['type'] == 'userstatus':
                 self.updateRols(response['users'])
                 # print(response['users'])
-            elif response['type'] == 'gamebegin':
-                print('game begin')
-                print('按钮点击失效，更新窗口')
             elif response['type'] == 'talk':
                 text = self.messageShow.toPlainText()
                 name = ':'
@@ -460,6 +486,7 @@ class RoomClient(QWidget):
                 sendEvent = TextEditEvent(text)
                 QCoreApplication.postEvent(self, sendEvent)
             elif response['type'] == 'gamebegin':
+                self.users = response['users']
                 self.beginGame()
 
     def sendMessage(self):
@@ -487,7 +514,11 @@ class RoomClient(QWidget):
         return super(RoomClient, self).event(a0)
 
     def gameBegin(self):
-        pass
+        resource.saveMap(self.room[1]['map'])
+        USER1 = TMap(self.room[1]['map']['name'], self.users, self.user, self.client)
+        USER1.show()
+        self.deleteLater()
+        self.parent().deleteLater()
 
 class RoomOwner(QWidget):
     def __init__(self, parent, winSize=QSize(800, 600), room=None):
@@ -504,6 +535,10 @@ class RoomOwner(QWidget):
         self.user['hero'] = 'google'
         self.users = [self.user]
         self.initUI(winSize)
+        self.canClose = True
+        self.clientEnd = False
+        self.clientInner = None
+        self.isClientTreadEnd = True
 
         self.client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.client.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -621,25 +656,28 @@ class RoomOwner(QWidget):
 
     def handleServer(self):
         # time.sleep(0.4)
+        self.client.settimeout(1)
         while 1:
             try:
                 response = self.client.recv(3072)
                 response = json.loads(zlib.decompress(response).decode('utf-8'))
                 print(self.user['username'], 'recived, data:', response)
-            except OSError:
-                print('contine')
-                continue
+            except (OSError, socket.timeout):
+                print(self.clientEnd)
+                if self.clientEnd:
+                    print('braek')
+                    break
+                else:
+                    print('contine')
+                    continue
             except (zlib.error):
                 print('zlib error')
                 self.client.close()
                 break
-            print('here00000')
+            # print('here00000')
             if response['type'] == 'userstatus':
                 self.updateRols(response['users'])
                 # print(response['users'])
-            elif response['type'] == 'gamebegin':
-                print('game begin')
-                print('按钮点击失效，更新窗口')
             elif response['type'] == 'talk':
                 text = self.messageShow.toPlainText()
                 name = ':'
@@ -651,7 +689,12 @@ class RoomOwner(QWidget):
                 sendEvent = TextEditEvent(text)
                 QCoreApplication.postEvent(self, sendEvent)
             elif response['type'] == 'gamebegin':
-                self.beginGame()
+                self.users = response['users']
+                self.gameBTread = myThread(target=self.gameBegin)
+                self.gameBTread.start()
+                # self.gameBegin()
+        self.isClientTreadEnd = True
+        print('end the client thread')
 
     def publish(self):
         self.user['userid'] = '0000'  ###%%%%%%%%%
@@ -662,8 +705,10 @@ class RoomOwner(QWidget):
         ROOMSERVER = RoomServer()
 
         self.clientThread = myThread(target=self.handleServer)
+        self.isClientTreadEnd = False
         # self.parent().server.start()
         ROOMSERVER.start()
+        self.parent().server = ROOMSERVER
         self.clientThread.start()
         try:
             self.client.connect(self.room[0])
@@ -689,12 +734,15 @@ class RoomOwner(QWidget):
         self.messageSend.setText('')
 
     def deleteLater(self) -> None:
-        if self.clientThread:
-            self.clientThread.stop()
+        # if self.clientThread:
+        #     self.clientThread.stop()
+        self.clientEnd = True
+        while not self.isClientTreadEnd:
+            pass
         if self.client:
-            self.client.close()
+            if self.canClose:
+                self.client.close()
         if self.roomServerThread:
-            # self.roomServerThread.endServer()
             self.roomServerThread.stop()
         return super(RoomOwner, self).deleteLater()
 
@@ -705,6 +753,7 @@ class RoomOwner(QWidget):
             return True
         return super(RoomOwner, self).event(a0)
 
+    ##send
     def beginGame(self):
         if self.user['flag'] == 'none' or not self.connected:
             return
@@ -712,8 +761,12 @@ class RoomOwner(QWidget):
         self.client.send(zlib.compress(json.dumps(requestion).encode('utf-8')))
 
     def gameBegin(self):
-        pass
-
+        resource.saveMap(self.room[1]['map'])
+        self.clientEnd = True
+        while not self.isClientTreadEnd:
+            pass
+        sendEvent = uiToGameEvent(self.room[1]['map']['name'], self.users, self.user, self.client)
+        QCoreApplication.postEvent(self.parent(), sendEvent)
 
 class TextEditEvent(QEvent):
     typeId = QEvent.registerEventType()
@@ -765,6 +818,6 @@ class SkimMaps(QWidget):
 if __name__ == "__main__":
     user1 = TopDirector()
     user1.show()
-    user2 = TopDirector()
-    user2.show()
+    # user2 = TopDirector()
+    # user2.show()
     sys.exit(Qapp.exec_())

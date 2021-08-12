@@ -50,7 +50,7 @@ class basicEditW(QMainWindow):
     def initUI(self):
         self.setWindowTitle('基础数据编辑')
         self.setFixedSize(1280, 800)
-        self.path = 'E:/Date_code/py_data\program02/basic_info.json'
+        self.path = 'configure/basic_info.json'
         geos = self.getInitData()
         dws = self.getInitData('dw')
         hero = ['warhton', 'google']

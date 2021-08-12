@@ -352,6 +352,8 @@ class VMap(QWidget):
     def mapMove(self, x, y, isforce=False):
         def move(x, y):
             for i in self.children():
+                if not hasattr(i, 'move'):
+                    continue
                 i.move(i.x() + x, i.y() + y)
         if isforce:
             move(x,y)

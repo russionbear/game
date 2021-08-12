@@ -39,6 +39,7 @@ class myThread(threading.Thread):
 BROADCAST_PORT = 22222
 LOCAL_IP = get_host_ip()
 LOCK = threading.RLock()
+ROOMSERVER = None
 
 
 class RoomServer(myThread):
@@ -76,6 +77,8 @@ class RoomServer(myThread):
     def run(self) -> None:
         while True:
             conn, address = self.serverSocket.accept()
+            # if self.canEnd:
+            #     break
             tem_process = myThread(target=self.serverHandle, kwargs={'conn': conn, 'address': address})
             self.handleProcesses.append((tem_process, conn))
             tem_process.start()
@@ -121,9 +124,25 @@ class RoomServer(myThread):
                     print('没开发', requstion)
                     conn.close()
                     break
-
+                except OSError:
+                    print('oserror')
+                    break
+                else:
+                    if self.isInGame:
+                        while 1:
+                            if self.canModify:
+                                for j1, j in enumerate(self.users):
+                                    if j['addr'][0] == address[0] and j['addr'][1] == address[1]:
+                                        self.users[j1]['status'] = 1
+                                        print('玩家重新连接')
+                                        break
+                                else:
+                                    print('游戏已开始，拒绝新玩家')
+                                    conn.close()
+                                break
                 if self.isInGame:
-                    pass
+                    if requstion['type'] == 'command':
+                        self.serverSend(requstion, address)
                 else:
                     if requstion['type'] == 'buildserver':
                         requstion['user']['addr'] = address
@@ -155,7 +174,21 @@ class RoomServer(myThread):
                     elif requstion['type'] == 'talk':
                         self.serverSend(requstion)
                     elif requstion['type'] == 'gamebegin':
+                        self.isInGame = True
+                        # color = ['red', 'blue', 'green', 'yellow']
+                        newUsers = []
+                        for i in self.map['map']['flags']:
+                            for j in self.users:
+                                if j['flag'] == i:
+                                    newUsers.append(j.copy())
+                                    del newUsers[-1]['conn']
+                            else:
+                                newUsers.append({'flag': i, 'hero': 'google', 'username': 'computer', 'userid': '-1', 'status': 1})
+                        # self.users = newUsers
+                        requstion['users'] = newUsers
                         self.serverSend(requstion)
+                        print('gamebegin')
+
         finally:
             # conn.close()
             # return
@@ -166,6 +199,7 @@ class RoomServer(myThread):
             if self.users[i]['status'] == 0:
                 return
             tem = self.users[i]['conn']
+            print('command', self.users)
             tem.send(zlib.compress(json.dumps(command).encode('utf-8')))
 
         tasks = []
@@ -185,6 +219,9 @@ class RoomServer(myThread):
 
     def stop(self):
         print('s stop')
+        self.canEnd = True
+        with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+            s.connect((LOCAL_IP, BROADCAST_PORT))
         super(RoomServer, self).stop()
         for i in self.handleProcesses:
             i[0].stop()

@@ -12,9 +12,9 @@ from PyQt5.Qt import *
 from PyQt5 import QtGui
 from PyQt5 import QtCore
 import functools
-import sys
+import sys, json, zlib
 from map_load import DW , Geo, VMap, resource
-
+from net.netTool import ROOMSERVER, myThread
 # class QApp(QApplication):
 #     def __init__(self):
 #         super(QApp, self).__init__(sys.argv)
@@ -38,39 +38,70 @@ qapp = QApplication(sys.argv)
 # qapp = QApp()
 
 class TMap(VMap):
-    def initUI(self, name='test1', parent=None, block=(100, 100), winSize=(800, 800), brother=None):
-        super(TMap, self).initUI(name, parent, block, winSize, brother)
-        self.circle.deleteLater()
-        del self.circled, self.circleStatus
-        self.showFullScreen()
-        self.canMove = (True if self.mapBlockSize[0]*self.mapSize[0] > self.width() else False,
-                               True if self.mapBlockSize[1]*self.mapSize[1]>self.height() else False)
-        x, y = (self.width()-self.mapBlockSize[0]*self.mapSize[0])//2, (self.height()-self.mapBlockSize[1]*self.mapSize[1])//2
-        self.mapMove(x, y, True)
-
-        #命令类型：存活多少单位，存活指定单位，防御某个建筑，存活多少建筑，拖住多少回合，回合内击杀，阻拦多少单位，阻拦某个单位，
+    def __init__(self, mapName='test1', users=None, tUser=None, conn=None, parent=None):
+        super(TMap, self).__init__(parent)
+        # 命令类型：存活多少单位，存活指定单位，防御某个建筑，存活多少建筑，拖住多少回合，回合内击杀，阻拦多少单位，阻拦某个单位，
         # 回合内消灭多少单位/资金，占领指挥部，消灭敌方，不消灭敌方某单位
-        self.users = [{'flag':'red', 'enemy':['blue'], 'action':'right', 'command_bg':'会战', 'command':'消灭敌方', \
-                       'outcome':0, 'money':99999, 'hero':'google', 'header_loc':None, 'canBeGua':False, 'bout':1, 'exp':2}, \
-                      {'flag':'blue', 'enemy':['red'], 'action':'left', 'command_bg':'会战', 'command':'消灭敌方', \
-                       'outcome':0, 'money':0, 'hero':'warhton', 'header_loc':None, 'canBeGua':False, 'bout':1, 'exp':2}]
+        # self.users = [{'flag': 'red', 'enemy': ['blue'], 'action': 'right', 'command_bg': '会战', 'command': '消灭敌方', \
+        #                'outcome': 0, 'money': 99999, 'hero': 'google', 'header_loc': None, 'canBeGua': False, 'bout': 1,
+        #                'exp': 2}, \
+        #               {'flag': 'blue', 'enemy': ['red'], 'action': 'left', 'command_bg': '会战', 'command': '消灭敌方', \
+        #                'outcome': 0, 'money': 0, 'hero': 'warhton', 'header_loc': None, 'canBeGua': False, 'bout': 1,
+        #                'exp': 2}]
+        ####加载地图内部参数
+        userMode = {'flag': 'red', 'enemy': ['blue'], 'action': 'right', 'command_bg': '会战', 'command': '消灭敌方', \
+                       'outcome': 0, 'money': 999, 'hero': 'google', 'header_loc': None, 'canBeGua': False, 'bout': 1,
+                       'exp': 0}
+        self.users = users
+        for i1, i in enumerate(self.users):
+            userMode.update(i)
+            self.users[i1] = userMode.copy()
+            print(self.users)
         self.user = self.users[0]
-        self.globalData = {'income':1000}
+        # print('')
+        self.user['action'] = 'left'
+        self.globalData = {'income': 1000}
         self.bout = 1
-        self.tUser = {'flag':'red'}
+        self.tUser = tUser
+        # self.tUser = {'flag': 'blue'}
+        self.client = conn
+
+        self.commands = []
+        self.command = None
+        self.command_ponit = 0
+
+        self.initUI(mapName)
 
         self.costMap = None
         self.dwChoosed = None
         self.targetChoosed = None
         self.areaToChoose = []
         self.planToSupply = []
-        self.roadsToChoose = {'point':0, 'roads':[], 'layers':[]}
-        self.targetsToChoose = {'choosed':None, 'layers':[]}
-        self.planToUnload = {'layers':[], 'data':[], 'loc':None}   # [[k:记录, odk2：可选落地点, 0：是否落地]]
+        self.roadsToChoose = {'point': 0, 'roads': [], 'layers': []}
+        self.targetsToChoose = {'choosed': None, 'layers': []}
+        self.planToUnload = {'layers': [], 'data': [], 'loc': None}  # [[k:记录, odk2：可选落地点, 0：是否落地]]
         self.actionTreeList = [None, 'areashowed', 'pathshowed', 'targetshowed', 'gtargetshowed', 'unloadingshow']
         self.choose_status = None  # None, areashowd, pathshowed, targetshowd, gtargetshowed, unloadshow
         self.dwChoosedStatus = 'move'
         self.shouldShow = []
+
+        self.isRun = True
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.timerStop)
+
+        self.dwUpdater = QTimer(self)
+        self.dwUpdater.timeout.connect(self.myUpdate)
+        self.dwUpdater.start(1400)
+
+    def initUI(self, name='test1', parent=None, block=(100, 100), winSize=(800, 800), brother=None):
+        super(TMap, self).initUI(name, parent, block, winSize, brother)
+        self.circle.deleteLater()
+        del self.circled, self.circleStatus
+        # self.showFullScreen()
+        self.canMove = (True if self.mapBlockSize[0]*self.mapSize[0] > self.width() else False,
+                               True if self.mapBlockSize[1]*self.mapSize[1]>self.height() else False)
+        x, y = (self.width()-self.mapBlockSize[0]*self.mapSize[0])//2, (self.height()-self.mapBlockSize[1]*self.mapSize[1])//2
+        self.mapMove(x, y, True)
 
         self.dwsListWidget = None
 
@@ -104,6 +135,8 @@ class TMap(VMap):
         self.choosePathMenu.show()
         self.choosePathMenu.hide()
 
+        print(self.client, name)
+
         self.unloadMenu = QFrame(self)
         layout_choosePath = QBoxLayout(QBoxLayout.TopToBottom)
         self.unloadMenuItems = []
@@ -112,7 +145,7 @@ class TMap(VMap):
             tem_btn.track = None
             layout_choosePath.addWidget(tem_btn)
             tem_btn.clicked.connect(functools.partial(self.dwCpu,'unloading', tem_btn))
-            tem_btn.show()
+            # tem_btn.show()
             self.unloadMenuItems.append(tem_btn)
         self.unloadMenu.setLayout(layout_choosePath)
         self.unloadMenu.show()
@@ -153,7 +186,7 @@ class TMap(VMap):
         self.Head_exp.valueChanged.connect(self.proValueChange)
         self.Head_exp.setValue(self.user['exp'])
         self.Head_name = QLabel(self.user['hero'])
-        self.Head_money = QLabel('$'+str(self.user['money']))
+        self.Head_money = QLabel('$'+str(int(self.user['money'])))
         head_font = QFont('宋体', 20)
         head_font.setBold(True)
         self.Head_money.setFont(head_font)
@@ -171,32 +204,23 @@ class TMap(VMap):
         self.Head.show()
         self.Head.raise_()
 
-        self.infoView = QListWidget(self)
-        self.infoView.show()
-        self.infoView.hide()
-        self.isCtrlDown = False
+        # self.infoView = QListWidget(self)
+        # self.infoView.show()
+        # self.infoView.hide()
+        # self.isCtrlDown = False
 
-        self.isRun = True
-        self.timer = QTimer(self)
-        self.timer.timeout.connect(self.timerStop)
-
-        self.dwUpdater = QTimer(self)
-        self.dwUpdater.timeout.connect(self.myUpdate)
-        self.dwUpdater.start(1400)
         actions = {}
         for i in self.users:
             actions[i['flag']] = i['action']
-        for i in self.pointer_dw:
-            for j in i:
-                if j:
-                    j.doBody(actions[j.track['flag']])
+        # for i in self.pointer_dw:
+        #     for j in i:
+        #         if j:
+        #             j.doBody(actions[j.track['flag']])
 
         self.childWindow = QWidget()
         self.childWindow.setWindowModality(Qt.ApplicationModal)
 
-        self.commands = []
-        self.command = None
-        self.command_ponit = 0
+
 
     def judgement(self, dw:DW, endP, command={}):
         if not endP or not self.pointer_dw[endP[0]][endP[1]]:
@@ -265,7 +289,7 @@ class TMap(VMap):
 
     def timerStop(self):
         # if self.user['flag'] == self.tUser['flag']:
-        if 0:
+        if 1:
             if self.dwChoosedStatus == 'waiting':
                 self.dwChoosed.doBody(self.user['action']+'G')
                 self.dwChoosed.moved = True
@@ -349,8 +373,10 @@ class TMap(VMap):
                 road = self.roadsToChoose['roads'][self.roadsToChoose['point']]
                 command = {'type':self.dwChoosedStatus, 'flag': self.user['flag'], 'road':road, 'loadings':newloadings.copy(), 'dws':dws}
                 self.commands.append(command)
-                print(len(self.commands), self.commands)
+                # print(len(self.commands), self.commands)
 
+            print('command', command)
+            self.sentToServer(command)
             shouldShow = []
             for i in self.shouldShow:
                 i.show()
@@ -360,77 +386,151 @@ class TMap(VMap):
             self.isRun = True
             self.clear(None)
             self.timer.stop()
-        else:
-            for ii in self.users:
-                if ii['flag'] == self.command['flag']:
-                    break
-            if self.dwChoosedStatus == 'waiting':
-                self.dwChoosed.doBody(self.user['action'] + 'G')
-                self.dwChoosed.moved = True
-            elif self.dwChoosedStatus == 'encounter':
-                self.dwChoosed.doBody(self.user['action'] + 'G')
-                self.dwChoosed.moved = True
-            elif self.dwChoosedStatus == 'stealth':
-                self.dwChoosed.doBody(self.user['action'] + 'G')
-                self.dwChoosed.moved = True
-                if resource.basicData['money']['candiving'][self.dwChoosed.track['name']] != '1':
-                    self.dwChoosed.isStealth = not self.dwChoosed.isStealth
-                else:
-                    self.dwChoosed.isDiving = not self.dwChoosed.isDiving
-            elif self.dwChoosedStatus == 'attacking':
-                enemy = self.pointer_dw[self.command['dw2']['mapId'][0]][self.command['dw2']['mapId'][1]]
-                tem_dw = self.pointer_dw[self.command['dw1']['mapId'][0]][self.command['dw1']['mapId'][1]]
-                if tem_dw.mapId[1] + 1 == enemy.mapId[1]:
-                    tem_dw.doBody('right')
-                elif tem_dw.mapId[1] - 1 == enemy.mapId[1]:
-                    tem_dw.doBody('left')
-                if not self.command['dw1']['isAlive']:
-                    self.pointer_dw[self.command['dw1']['mapId'][0]][self.command['dw1']['mapId'][1]] = None
-                    tem_dw.deleteLater()
-                else:
-                    tem_dw.updateByTrack(self.command['dw1'])
-                    tem_dw.doBlood(tem_dw.bloodValue)
-                    tem_dw.doBody(ii['action']+'G')
-                if not self.command['dw2']['isAlive']:
-                    self.pointer_dw[self.command['dw2']['mapId'][0]][self.command['dw2']['mapId'][1]] = None
-                    enemy.deleteLater()
-                else:
-                    enemy.updateByTrack(self.command['dw2'])
-                    enemy.doBlood(enemy.bloodValue)
-            elif self.dwChoosedStatus == 'occupy':
-                self.dwChoosed.occupied = self.command['occupy']
-                if self.dwChoosed.occupied >= 20:
-                    dw = self.pointer_geo[self.dwChoosed.mapId[0]][self.dwChoosed.mapId[1]]
-                    track = resource.find({'usage': 'build', 'name': dw.track['name'], 'flag': self.user['flag']})
-                    dw.change(track=track)
-                    self.dwChoosed.occupied = 0
-                self.dwChoosed.doBody(self.user['action'] + 'G')
-                self.dwChoosed.moved = True
-            elif self.dwChoosedStatus == 'loading':
-                tem_dw = self.pointer_dw[self.command['road'][0][0]][self.command['road'][0][1]]
-                self.pointer_dw[self.command['road'][0][0]][self.command['road'][0][1]] = None
-                enemy = self.pointer_dw[self.command['road'][-1][0]][self.command['road'][-1][1]]
-                enemy.loadings.append(tem_dw.makeTrack())
+        # else:
+        #     for ii in self.users:
+        #         if ii['flag'] == self.command['flag']:
+        #             break
+        #     if self.dwChoosedStatus == 'waiting':
+        #         self.dwChoosed.doBody(self.user['action'] + 'G')
+        #         self.dwChoosed.moved = True
+        #     elif self.dwChoosedStatus == 'encounter':
+        #         self.dwChoosed.doBody(self.user['action'] + 'G')
+        #         self.dwChoosed.moved = True
+        #     elif self.dwChoosedStatus == 'stealth':
+        #         self.dwChoosed.doBody(self.user['action'] + 'G')
+        #         self.dwChoosed.moved = True
+        #         if resource.basicData['money']['candiving'][self.dwChoosed.track['name']] != '1':
+        #             self.dwChoosed.isStealth = not self.dwChoosed.isStealth
+        #         else:
+        #             self.dwChoosed.isDiving = not self.dwChoosed.isDiving
+        #     elif self.dwChoosedStatus == 'attacking':
+        #         enemy = self.pointer_dw[self.command['dw2']['mapId'][0]][self.command['dw2']['mapId'][1]]
+        #         tem_dw = self.pointer_dw[self.command['dw1']['mapId'][0]][self.command['dw1']['mapId'][1]]
+        #         if tem_dw.mapId[1] + 1 == enemy.mapId[1]:
+        #             tem_dw.doBody('right')
+        #         elif tem_dw.mapId[1] - 1 == enemy.mapId[1]:
+        #             tem_dw.doBody('left')
+        #         if not self.command['dw1']['isAlive']:
+        #             self.pointer_dw[self.command['dw1']['mapId'][0]][self.command['dw1']['mapId'][1]] = None
+        #             tem_dw.deleteLater()
+        #         else:
+        #             tem_dw.updateByTrack(self.command['dw1'])
+        #             tem_dw.doBlood(tem_dw.bloodValue)
+        #             tem_dw.doBody(ii['action']+'G')
+        #         if not self.command['dw2']['isAlive']:
+        #             self.pointer_dw[self.command['dw2']['mapId'][0]][self.command['dw2']['mapId'][1]] = None
+        #             enemy.deleteLater()
+        #         else:
+        #             enemy.updateByTrack(self.command['dw2'])
+        #             enemy.doBlood(enemy.bloodValue)
+        #     elif self.dwChoosedStatus == 'occupy':
+        #         self.dwChoosed.occupied = self.command['occupy']
+        #         if self.dwChoosed.occupied >= 20:
+        #             dw = self.pointer_geo[self.dwChoosed.mapId[0]][self.dwChoosed.mapId[1]]
+        #             track = resource.find({'usage': 'build', 'name': dw.track['name'], 'flag': self.user['flag']})
+        #             dw.change(track=track)
+        #             self.dwChoosed.occupied = 0
+        #         self.dwChoosed.doBody(self.user['action'] + 'G')
+        #         self.dwChoosed.moved = True
+        #     elif self.dwChoosedStatus == 'loading':
+        #         tem_dw = self.pointer_dw[self.command['road'][0][0]][self.command['road'][0][1]]
+        #         self.pointer_dw[self.command['road'][0][0]][self.command['road'][0][1]] = None
+        #         enemy = self.pointer_dw[self.command['road'][-1][0]][self.command['road'][-1][1]]
+        #         enemy.loadings.append(tem_dw.makeTrack())
+        #         tem_dw.deleteLater()
+        #     elif self.dwChoosedStatus == 'unloading':
+        #         self.dwChoosed.loadings = self.command['loadings']
+        #         self.dwChoosed.doBody(ii['action']+'G')
+        #         self.dwChoosed.moved = True
+        #         for i in self.command['dws']:
+        #             tem_dw = DW(self)
+        #             tem_dw.initUI({'usage':'dw', 'flag':self.command['flag'], 'action':ii['action']+'G', 'name':i['name']})
+        #             tem_dw.updateByTrack(i)
+        #             tem_dw.setGeometry(self.pointer_geo[i['mapId'][0]][i['mapId'][1]].geometry())
+        #             self.pointer_dw[i['mapId'][0]][i['mapId'][1]] = tem_dw
+        #             tem_dw.show()
+        #             tem_dw.raise_()
+        #         # for
+        #     if self.tUser['flag'] not in ii['enemy']:
+        #         for i in self.command['shouldShow']:
+        #             self.pointer_dw[i[0]][i[1]].show()
+        #     self.isRun = True
+        #     self.clear(None)
+        #     self.timer.stop()
+
+    def commandTimeStop(self, command, choosed, type, scends):
+        time.sleep(scends)
+        for ii in self.users:
+            if ii['flag'] == command['flag']:
+                break
+        if type == 'waiting':
+            choosed.doBody(ii['action'] + 'G')
+            choosed.moved = True
+        elif type == 'encounter':
+            choosed.doBody(ii['action'] + 'G')
+            choosed.moved = True
+        elif type == 'stealth':
+            choosed.doBody(ii['action'] + 'G')
+            choosed.moved = True
+            if resource.basicData['money']['candiving'][choosed.track['name']] != '1':
+                choosed.isStealth = not choosed.isStealth
+            else:
+                choosed.isDiving = not choosed.isDiving
+        elif type == 'attacking':
+            enemy = self.pointer_dw[command['dw2']['mapId'][0]][command['dw2']['mapId'][1]]
+            tem_dw = self.pointer_dw[command['dw1']['mapId'][0]][command['dw1']['mapId'][1]]
+            if tem_dw.mapId[1] + 1 == enemy.mapId[1]:
+                tem_dw.doBody('right')
+            elif tem_dw.mapId[1] - 1 == enemy.mapId[1]:
+                tem_dw.doBody('left')
+            if not command['dw1']['isAlive']:
+                self.pointer_dw[command['dw1']['mapId'][0]][command['dw1']['mapId'][1]] = None
                 tem_dw.deleteLater()
-            elif self.dwChoosedStatus == 'unloading':
-                self.dwChoosed.loadings = self.command['loadings']
-                self.dwChoosed.doBody(ii['action']+'G')
-                self.dwChoosed.moved = True
-                for i in self.command['dws']:
-                    tem_dw = DW(self)
-                    tem_dw.initUI({'usage':'dw', 'flag':self.command['flag'], 'action':ii['action']+'G', 'name':i['name']})
-                    tem_dw.updateByTrack(i)
-                    tem_dw.setGeometry(self.pointer_geo[i['mapId'][0]][i['mapId'][1]].geometry())
-                    self.pointer_dw[i['mapId'][0]][i['mapId'][1]] = tem_dw
-                    tem_dw.show()
-                    tem_dw.raise_()
-                # for
-            if self.tUser['flag'] not in ii['enemy']:
-                for i in self.command['shouldShow']:
-                    self.pointer_dw[i[0]][i[1]].show()
-            self.isRun = True
-            self.clear(None)
-            self.timer.stop()
+            else:
+                tem_dw.updateByTrack(command['dw1'])
+                tem_dw.doBlood(tem_dw.bloodValue)
+                tem_dw.doBody(ii['action'] + 'G')
+            if not command['dw2']['isAlive']:
+                self.pointer_dw[command['dw2']['mapId'][0]][command['dw2']['mapId'][1]] = None
+                enemy.deleteLater()
+            else:
+                enemy.updateByTrack(command['dw2'])
+                enemy.doBlood(enemy.bloodValue)
+        elif type == 'occupy':
+            choosed.occupied = command['occupy']
+            if choosed.occupied >= 20:
+                dw = self.pointer_geo[choosed.mapId[0]][choosed.mapId[1]]
+                track = resource.find({'usage': 'build', 'name': dw.track['name'], 'flag': ii['flag']})
+                dw.change(track=track)
+                choosed.occupied = 0
+            choosed.doBody(ii['action'] + 'G')
+            choosed.moved = True
+        elif type == 'loading':
+            tem_dw = self.pointer_dw[command['road'][0][0]][command['road'][0][1]]
+            self.pointer_dw[command['road'][0][0]][command['road'][0][1]] = None
+            enemy = self.pointer_dw[command['road'][-1][0]][command['road'][-1][1]]
+            enemy.loadings.append(tem_dw.makeTrack())
+            tem_dw.deleteLater()
+        elif type == 'unloading':
+            choosed.loadings = command['loadings']
+            choosed.doBody(ii['action'] + 'G')
+            choosed.moved = True
+            for i in command['dws']:
+                tem_dw = DW(self)
+                tem_dw.initUI(
+                    {'usage': 'dw', 'flag': command['flag'], 'action': ii['action'] + 'G', 'name': i['name']})
+                tem_dw.updateByTrack(i)
+                tem_dw.setGeometry(self.pointer_geo[i['mapId'][0]][i['mapId'][1]].geometry())
+                self.pointer_dw[i['mapId'][0]][i['mapId'][1]] = tem_dw
+                tem_dw.show()
+                tem_dw.raise_()
+            # for
+        if self.tUser['flag'] not in ii['enemy']:
+            for i in command['shouldShow']:
+                self.pointer_dw[i[0]][i[1]].show()
+        self.isRun = True
+        self.clear(None)
+        self.timer.stop()
 
     def timerGo(self, m):
         self.isRun = False
@@ -607,7 +707,7 @@ class TMap(VMap):
         return tem_area
 
     def roadCount(self, dw:DW, last, costMap=None):
-        print(last)
+        self.roadsToChoose['point'] = 0
         if not costMap:
             print('roadCount error')
             return
@@ -871,6 +971,12 @@ class TMap(VMap):
                     #%%%%%%%
                     command = {'type':'builddw', 'flag':self.user['flag'], 'dw':dw.makeTrack(), 'user':self.user.copy()}
                     self.commands.append(command)
+                    self.sentToServer(command)
+                    print(command)
+                    if self.user['money'] > 999999:
+                        self.Head_money.setText('$??????')
+                    else:
+                        self.Head_money.setText('$'+str(int(self.user['money'])))
 
             # elif self.dwChoosedStatus == 'buy':
             #
@@ -940,6 +1046,12 @@ class TMap(VMap):
 
                     command = {'type':'buied', 'flag':self.user['flag'], 'supplies':self.dwChoosed.supplies.copy(), 'dws':dws, 'user':self.user.copy()}
                     self.commands.append(command)
+                    self.sentToServer(command)
+                    print(command)
+                    if self.user['money'] > 999999:
+                        self.Head_money.setText('$??????')
+                    else:
+                        self.Head_money.setText('$' + str(self.user['money']))
 
                     self.clear(None)
                     self.dwsListWidget.close()
@@ -956,10 +1068,13 @@ class TMap(VMap):
             if i['flag'] == command['flag']:
                 break
         self.command = command
+        def updateMoney():
+            if self.user['money'] > 999999:
+                self.Head_money.setText('$??????')
+            else:
+                self.Head_money.setText('$' + str(self.user['money']))
         def handTheSame():
-            self.dwChoosed = self.pointer_dw[command['road'][0][0]][command['road'][0][1]]
-            self.dwChoosedStatus = command['type']
-            self.animeCommandMove(command['road'])
+            self.animeCommandMove(self.pointer_dw[command['road'][0][0]][command['road'][0][1]], command['road'], command['type'], command)
         if command['type'] == 'builddw':
             dw = DW(self)
             dw.initUI({'usage':'dw', 'flag':command['flag'], 'name':command['dw']['name'], 'action':self.users[i1]['action']},)
@@ -970,6 +1085,7 @@ class TMap(VMap):
             dw.doBody(self.users[i1]['action']+'G')
             self.users[i1]['moeny'] = command['user']['money']
             self.users[i1]['outcome'] = command['user']['outcome']
+            updateMoney()
         elif command['type'] == 'buied':
             tem_dw = self.pointer_dw[command['dws'][0][0]][command['dws'][0][1]]
             tem_dw.supplies = command['supplies']
@@ -980,6 +1096,7 @@ class TMap(VMap):
                 # i.doBody(self.users[i1]['action']+'G')
             self.users[i1]['moeny'] = command['user']['money']
             self.users[i1]['outcome'] = command['user']['outcome']
+            updateMoney()
         elif command['type'] == 'waiting':
             handTheSame()
         elif command['type'] == 'encounter':
@@ -1045,12 +1162,14 @@ class TMap(VMap):
         self.timerGo((len(actions)-1)*inter_time)
         # qapp.timerGo(len(actions)*inter_time)
 
-    def animeCommandMove(self, actions):
+    def animeCommandMove(self, choosed, actions, type, command):
+        # self.moveToDw(choosed)
+        # time.sleep(0.4)
         inter_time = 200
         group = QSequentialAnimationGroup(self)
         for i in range(len(actions[:-1])):
-            self.dwChoosed.raise_()
-            tem_anime = QPropertyAnimation(self.dwChoosed, b'pos', self)
+            choosed.raise_()
+            tem_anime = QPropertyAnimation(choosed, b'pos', self)
             tem_anime.setStartValue(self.pointer_geo[actions[i][0]][actions[i][1]].pos())
             tem_anime.setEndValue(self.pointer_geo[actions[i+1][0]][actions[i+1][1]].pos())
             tem_anime.setDuration(inter_time)
@@ -1058,17 +1177,21 @@ class TMap(VMap):
                 tem_anime.setEasingCurve(QEasingCurve.InQuad)
             group.addAnimation(tem_anime)
         if len(actions) != 1:
-            self.dwChoosed.occupied = 0
-            if self.dwChoosedStatus != 'loading':
+            choosed.occupied = 0
+            if type != 'loading':
                 self.pointer_dw[actions[0][0]][actions[0][1]] = None
-                self.pointer_dw[actions[-1][0]][actions[-1][1]] = self.dwChoosed
+                self.pointer_dw[actions[-1][0]][actions[-1][1]] = choosed
 
         if actions[-1][1] > actions[0][1]:
-            self.dwChoosed.doBody('right')
+            choosed.doBody('right')
         elif actions[-1][1] < actions[0][1]:
-            self.dwChoosed.doBody('left')
+            choosed.doBody('left')
+        # command, choosed, type
+        tem_thread = myThread(target=self.commandTimeStop, \
+                              kwargs={'command':command, 'choosed':choosed, 'type':type, 'scends':((len(actions)-1)*inter_time)/1000})
         group.start()
-        self.timerGo((len(actions)-1)*inter_time)
+        tem_thread.start()
+        # self.timerGo((len(actions)-1)*inter_time)
 
     def clear(self, toChooseStatus):
         if toChooseStatus == 'return':
@@ -1132,45 +1255,10 @@ class TMap(VMap):
 
     '''选择， 移动， 缩放'''
     def mousePressEvent(self, a0: QtGui.QMouseEvent) -> None:
-        commands = [{'type': 'builddw', 'flag': 'red',
-                     'dw': {'isAlive': True, 'blood': 10, 'oil': 60, 'bullect': 60, 'occpuied': 0, 'isStealth': False,
-                            'isDiving': False, 'loadings': [], 'supplies': {}, 'moved': True, 'mapId': (6, 4),
-                            'name': 'thaad'},
-                     'user': {'flag': 'red', 'enemy': ['blue'], 'action': 'right', 'command_bg': '会战',
-                              'command': '消灭敌方',
-                              'outcome': 12000.0, 'money': 87999.0, 'hero': 'google', 'header_loc': None,
-                              'canBeGua': True,
-                              'bout': 1, 'exp': 2}},
-                    {'type': 'buied', 'flag': 'red', 'supplies': {'footmen': 1200.0}, 'dws': [(5, 5)],
-                     'user': {'flag': 'red', 'enemy': ['blue'], 'action': 'right', 'command_bg': '会战',
-                              'command': '消灭敌方',
-                              'outcome': 12000.0, 'money': 87999.0, 'hero': 'google', 'header_loc': None,
-                              'canBeGua': True,
-                              'bout': 1, 'exp': 2}},
-                    {'type': 'waiting', 'flag': 'red', 'road': [(5, 7), (6, 7)], 'shouldShow': []},
-                    {'type': 'stealth', 'flag': 'red', 'road': [(9, 1), (10, 1)], 'shouldShow': []},
-                    {'type': 'stealth', 'flag': 'red', 'road': [(6, 1)], 'shouldShow': []},
-                    {'type': 'occupy', 'flag': 'red', 'road': [(7, 2), (7, 3)], 'occupy': 10, 'shouldShow': []},
-                    {'type': 'loading', 'flag': 'red', 'road': [(10, 0), (9, 0)], 'shouldShow': []},
-                    {'type': 'attacking', 'flag': 'red', 'road': [(6, 3), (5, 3), (4, 3), (3, 3)],
-                     'dw1': {'isAlive': True, 'blood': 10.0, 'oil': 10.0, 'bullect': 10.0, 'occpuied': 0,
-                             'isStealth': False, 'isDiving': False, 'loadings': [], 'supplies': {}, 'moved': True,
-                             'mapId': (3, 3), 'name': 'B2'},
-                     'dw2': {'isAlive': True, 'blood': 6.0, 'oil': 10.0, 'bullect': 10.0, 'occpuied': 0,
-                             'isStealth': False,
-                             'isDiving': False, 'loadings': [], 'supplies': {}, 'moved': False, 'mapId': (3, 4),
-                             'name': 'submarine'}, 'shouldShow': []},
-                    {'type': 'unloading', 'flag': 'red', 'shouldShow':[], 'road': [(9, 0), (8, 0), (7, 0), (6, 0), (5, 0)], 'loadings': [], 'dws': [
-                        {'isAlive': True, 'blood': 10, 'oil': 90.0, 'bullect': 9.0, 'occpuied': 0, 'isStealth': False,
-                         'isDiving': False, 'loadings': [], 'supplies': {}, 'moved': True, 'mapId': (5, 1),
-                         'name': 'footmen'}]}]
-        if self.command_ponit >= len(commands):
+        # print(a0.button())
+        if a0.button() == 4:
+            self.clientHandle()
             return
-        self.dwCommandCpu(commands[self.command_ponit])
-        self.command_ponit += 1
-
-        return
-
         if not self.isRun:
             return
         self.canRightMenuShow = True
@@ -1414,7 +1502,8 @@ class TMap(VMap):
         if self.choose_status != 'pathshowed':
             return
         isUp = a0 if isinstance(a0, int) else -a0.angleDelta().y()
-        if (isUp < 0 and self.roadsToChoose['point'] == 0) or (isUp > 0 and self.roadsToChoose['point'] == len(self.roadsToChoose['roads']) -1):
+        if (isUp < 0 and self.roadsToChoose['point'] == 0) or (isUp > 0 and self.roadsToChoose['point'] >= len(self.roadsToChoose['roads']) -1):
+            self.roadsToChoose['point'] == 0 if isUp < 0 else len(self.roadsToChoose['roads']) - 1
             return
         for i in self.roadsToChoose['layers']:
             i.deleteLater()
@@ -1686,6 +1775,17 @@ class TMap(VMap):
                 if i.track['flag'] == self.user['flag']:
                     self.user['money'] += self.globalData['income']
                     self.user['outcome'] = 0
+
+        #换头
+        self.Head_head.setPixmap(resource.find({'usage':'hero', 'name':self.user['hero'], 'action':'head'})['pixmap'].scaled(80, 80))
+        self.Head_exp.setValue(self.user['exp'])
+        self.Head_exp.setMaximum(int(resource.basicData['hero_f'][self.user['hero']]['max_energy']))
+        self.Head_name.setText(self.user['hero'])
+        self.Head.setStyleSheet('border-radius:5px;background-color:'+self.user['flag']+';')
+        if self.user['money'] > 999999:
+            self.Head_money.setText('$??????')
+        else:
+            self.Head_money.setText('$'+str(int(self.user['money'])))
         ###补给
         directions = [(-1, 1), (1, 1), (-1, -1), (1, -1)]
         cols = len(self.map['map'][0])
@@ -1729,9 +1829,11 @@ class TMap(VMap):
                             if x1 <0 or x1 >= rows or y1 <0 or y1 >= cols or (x1, y1) in points:
                                 continue
                             if self.pointer_dw[x1][y1]:
+                                if self.pointer_dw[x1][y1].track['flag'] != self.user['flag']:
+                                    continue
                                 if len(i.supplies):
                                     if round(self.pointer_dw[x1][y1].bloodValue) != 10 and self.pointer_dw[x1][y1].track['flag'] == self.user['flag']:
-                                        print(self.pointer_dw[x1][y1])
+                                        # print(self.pointer_dw[x1][y1])
                                         shouldsupply.append(self.pointer_dw[x1][y1])
                                         points.append((x1, y1))
                                 else:
@@ -1793,11 +1895,84 @@ class TMap(VMap):
         else:
             self.Head_exp.setStyleSheet('background-color:white;color:white;border-radius:0;')
 
+    def clientHandle(self):
+        # commands = [{'type': 'builddw', 'flag': 'red',
+        #              'dw': {'isAlive': True, 'blood': 10, 'oil': 60, 'bullect': 60, 'occpuied': 0, 'isStealth': False,
+        #                     'isDiving': False, 'loadings': [], 'supplies': {}, 'moved': True, 'mapId': (6, 4),
+        #                     'name': 'thaad'},
+        #              'user': {'flag': 'red', 'enemy': ['blue'], 'action': 'right', 'command_bg': '会战',
+        #                       'command': '消灭敌方',
+        #                       'outcome': 12000.0, 'money': 87999.0, 'hero': 'google', 'header_loc': None,
+        #                       'canBeGua': True,
+        #                       'bout': 1, 'exp': 2}},
+        #             {'type': 'buied', 'flag': 'red', 'supplies': {'footmen': 1200.0}, 'dws': [(5, 5)],
+        #              'user': {'flag': 'red', 'enemy': ['blue'], 'action': 'right', 'command_bg': '会战',
+        #                       'command': '消灭敌方',
+        #                       'outcome': 12000.0, 'money': 87999.0, 'hero': 'google', 'header_loc': None,
+        #                       'canBeGua': True,
+        #                       'bout': 1, 'exp': 2}},
+        #             {'type': 'waiting', 'flag': 'red', 'road': [(5, 7), (6, 7)], 'shouldShow': []},
+        #             {'type': 'stealth', 'flag': 'red', 'road': [(9, 1), (10, 1)], 'shouldShow': []},
+        #             {'type': 'stealth', 'flag': 'red', 'road': [(6, 1)], 'shouldShow': []},
+        #             {'type': 'occupy', 'flag': 'red', 'road': [(7, 2), (7, 3)], 'occupy': 10, 'shouldShow': []},
+        #             {'type': 'loading', 'flag': 'red', 'road': [(10, 0), (9, 0)], 'shouldShow': []},
+        #             {'type': 'attacking', 'flag': 'red', 'road': [(6, 3), (5, 3), (4, 3), (3, 3)],
+        #              'dw1': {'isAlive': True, 'blood': 10.0, 'oil': 10.0, 'bullect': 10.0, 'occpuied': 0,
+        #                      'isStealth': False, 'isDiving': False, 'loadings': [], 'supplies': {}, 'moved': True,
+        #                      'mapId': (3, 3), 'name': 'B2'},
+        #              'dw2': {'isAlive': True, 'blood': 6.0, 'oil': 10.0, 'bullect': 10.0, 'occpuied': 0,
+        #                      'isStealth': False,
+        #                      'isDiving': False, 'loadings': [], 'supplies': {}, 'moved': False, 'mapId': (3, 4),
+        #                      'name': 'submarine'}, 'shouldShow': []},
+        #             {'type': 'unloading', 'flag': 'red', 'shouldShow':[], 'road': [(9, 0), (8, 0), (7, 0), (6, 0), (5, 0)], 'loadings': [], 'dws': [
+        #                 {'isAlive': True, 'blood': 10, 'oil': 90.0, 'bullect': 9.0, 'occpuied': 0, 'isStealth': False,
+        #                  'isDiving': False, 'loadings': [], 'supplies': {}, 'moved': True, 'mapId': (5, 1),
+        #                  'name': 'footmen'}]}]
+        # if self.command_ponit >= len(commands):
+        #     return
+        # self.dwCommandCpu(commands[self.command_ponit])
+        # self.command_ponit += 1
+        #
+        # return
+        while 1:
+            try:
+                response = self.client.recv(3072)
+                response = json.loads(zlib.decompress(response).decode('utf-8'))
+                print(self.user['username'], 'recived, data:', response)
+            except OSError:
+                print('contine')
+                continue
+            except (zlib.error):
+                print('zlib error, game over')
+                self.client.close()
+                break
+            # if response['type'] == 'userstatus':
+            # elif response['type'] == 'gamebegin':
+            # elif response['type'] == 'talk':
+            # elif response['type'] == 'gamebegin':
+            if response['type'] == 'command':
+                self.dwCommandCpu(response['command'])
+            elif response['type'] == 'bout':
+                pass
+            elif response['type'] == 'gameover':
+                pass
+
+    def sentToServer(self, command):
+        if self.client:
+            self.client.send(zlib.compress(json.dumps(command).encode('utf-8')))
+
+
 
 if __name__ == '__main__':
+    hereusers = [{'flag': 'red', 'enemy': ['blue'], 'action': 'right', 'command_bg': '会战', 'command': '消灭敌方', \
+                   'outcome': 0, 'money': 99999, 'hero': 'google', 'header_loc': None, 'canBeGua': False, 'bout': 1,
+                   'exp': 2}, \
+                  {'flag': 'blue', 'enemy': ['red'], 'action': 'left', 'command_bg': '会战', 'command': '消灭敌方', \
+                   'outcome': 0, 'money': 0, 'hero': 'warhton', 'header_loc': None, 'canBeGua': False, 'bout': 1,
+                   'exp': 2}]
+    window = TMap(users=hereusers, tUser=hereusers[0])
+    window.show()
 
-    # QListWidgetItem()
-    window = TMap()
-    window.initUI()
+    # window.initUI()
     # window.moveToDw()
     sys.exit(qapp.exec_())
