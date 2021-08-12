@@ -154,6 +154,8 @@ class RoomServer(myThread):
                         updateUsers(address, requstion['user'])
                     elif requstion['type'] == 'talk':
                         self.serverSend(requstion)
+                    elif requstion['type'] == 'gamebegin':
+                        self.serverSend(requstion)
         finally:
             # conn.close()
             # return
