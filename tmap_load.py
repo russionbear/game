@@ -56,7 +56,7 @@ class TMap(VMap):
         for i1, i in enumerate(self.users):
             userMode.update(i)
             self.users[i1] = userMode.copy()
-            print(self.users)
+            # print(self.users)
         self.user = self.users[0]
         self.user['bout'] += 1
         for i in self.users:
@@ -69,8 +69,17 @@ class TMap(VMap):
         self.bout = 1
         self.tUser = tUser
         # self.tUser = {'flag': 'blue'}
+        #### 开挂
+        self.users[0]['enemy'] == ['blue', 'yellow']
+        self.users[1]['enemy'] == ['red', 'yellow']
 
         self.initUI(mapName)
+
+        for i in self.findChildren(DW):
+            if i.track['flag'] == self.tUser['flag']:
+                i.doBody('right')
+            else:
+                i.doBody('left')
 
         self.client = conn
         self.clientEnd = False
@@ -108,7 +117,6 @@ class TMap(VMap):
         self.dwUpdater = QTimer(self)
         self.dwUpdater.timeout.connect(self.myUpdate)
         self.dwUpdater.start(1400)
-
 
     def initUI(self, name='test1', parent=None, block=(100, 100), winSize=(800, 800), brother=None):
         super(TMap, self).initUI(name, parent, block, winSize, brother)
@@ -304,26 +312,38 @@ class TMap(VMap):
     def timerStop(self):
         command = {}
         road = []
-        def doSame():
-        #     global command, road
+        # def doSame():
+        # #     global command, road
+        #     self.dwChoosed.doBody(self.user['action']+'G')
+        #     self.dwChoosed.moved = True
+        #     road = self.roadsToChoose['roads'][self.roadsToChoose['point']]
+        #     command = {'type':self.dwChoosedStatus, 'flag': self.user['flag'], 'road':road}
+        #     self.commands.append(command)
+        #     return command, road
+
+        if self.dwChoosedStatus == 'waiting':
             self.dwChoosed.doBody(self.user['action']+'G')
             self.dwChoosed.moved = True
             road = self.roadsToChoose['roads'][self.roadsToChoose['point']]
             command = {'type':self.dwChoosedStatus, 'flag': self.user['flag'], 'road':road}
             self.commands.append(command)
-            return command, road
-
-        if self.dwChoosedStatus == 'waiting':
-            command, road = doSame()
         ### 非tUser单位只能由命令修改
         elif self.dwChoosedStatus == 'encounter':
-            command, road = doSame()
+            self.dwChoosed.doBody(self.user['action']+'G')
+            self.dwChoosed.moved = True
+            road = self.roadsToChoose['roads'][self.roadsToChoose['point']]
+            command = {'type':self.dwChoosedStatus, 'flag': self.user['flag'], 'road':road}
+            self.commands.append(command)
         elif self.dwChoosedStatus == 'stealth':
             if self.choose_btn_stealth.text() == '下潜':
                 self.dwChoosed.isDiving = not self.dwChoosed.isDiving
             else:
                 self.dwChoosed.isStealth = not self.dwChoosed.isStealth
-            command, road = doSame()
+            self.dwChoosed.doBody(self.user['action']+'G')
+            self.dwChoosed.moved = True
+            road = self.roadsToChoose['roads'][self.roadsToChoose['point']]
+            command = {'type':self.dwChoosedStatus, 'flag': self.user['flag'], 'road':road}
+            self.commands.append(command)
         elif self.dwChoosedStatus == 'attacking':
             if self.dwChoosed.mapId[1] + 1 == self.targetsToChoose['choosed'][1]:
                 self.dwChoosed.doBody('right')
@@ -340,7 +360,11 @@ class TMap(VMap):
                 track = resource.find({'usage':'build', 'name':dw.track['name'], 'flag':self.user['flag']})
                 dw.change(track=track)
                 self.dwChoosed.occupied = 0
-            command, road = doSame()
+            self.dwChoosed.doBody(self.user['action']+'G')
+            self.dwChoosed.moved = True
+            road = self.roadsToChoose['roads'][self.roadsToChoose['point']]
+            command = {'type':self.dwChoosedStatus, 'flag': self.user['flag'], 'road':road}
+            self.commands.append(command)
         elif self.dwChoosedStatus == 'loading':
             actions = self.roadsToChoose['roads'][self.roadsToChoose['point']]
             self.pointer_dw[actions[-1][0]][actions[-1][1]].loadings.append(self.dwChoosed.makeTrack())
@@ -1479,8 +1503,8 @@ class TMap(VMap):
 
     def event(self, a0: QtCore.QEvent) -> bool:
         if a0.type() == CommandEvent.idType:
-            if a0.command == 'bout':
-                self.boutUpdate()
+            if a0.command['type'] == 'bout':    # %%%%%%%%%
+                self.boutUpdate(True)
             else:
                 self.dwCommandCpu(a0.command)
             a0.accept()
@@ -1707,12 +1731,15 @@ class TMap(VMap):
                 j.flush()
                 j.myUpdate()
 
-    def boutUpdate(self):
-        def send():
-            newCommand = {'type':'bout'}
-            self.client.send(zlib.compress(json.dumps(newCommand).encode('utf-8')))
-        if self.client:
-            myThread(target=send).start()
+    def boutUpdate(self, fromServer=False):
+        if not fromServer:
+            if self.user['flag'] != self.tUser['flag']:
+                return
+            def send():
+                newCommand = {'type':'bout', 'flag':self.user['flag']}
+                self.client.send(zlib.compress(json.dumps(newCommand).encode('utf-8')))
+            if self.client:
+                myThread(target=send).start()
 
         self.user['bout'] += 1
         self.isRun = False

@@ -642,10 +642,10 @@ class RoomOwner(QWidget):
         self.invate = QPushButton('发布邀请')
         self.invate.clicked.connect(self.publish)
         layout4.addWidget(self.invate)
-        tem_btn = QPushButton('开始')
-        tem_btn.setToolTip('空缺的玩家位置将被电脑代替')
-        tem_btn.clicked.connect(self.beginGame)
-        layout4.addWidget(tem_btn)
+        self.beginButton = QPushButton('开始')
+        self.beginButton.setToolTip('空缺的玩家位置将被电脑代替')
+        self.beginButton.clicked.connect(self.beginGame)
+        layout4.addWidget(self.beginButton)
         tem_btn = QPushButton('返回')
         tem_btn.clicked.connect(self.parent().toIntranet)
         layout4.addWidget(tem_btn)
@@ -820,6 +820,8 @@ class RoomOwner(QWidget):
             return
         requestion = {'type': 'gamebegin'}
         self.client.send(zlib.compress(json.dumps(requestion).encode('utf-8')))
+        self.beginButton.setText('加载中...')
+        self.beginButton.setEnabled(False)
 
     def gameBegin(self):
         resource.saveMap(self.room[1]['map'])

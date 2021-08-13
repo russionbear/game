@@ -121,9 +121,6 @@ class RoomServer(myThread):
                                 print('玩家断开连接')
                                 break
                     print('这里')
-                    # print('没开发', requstion)
-                    # conn.close()
-                    # break
                 except OSError:
                     print('oserror')
                     break
@@ -140,7 +137,7 @@ class RoomServer(myThread):
                                     print('游戏已开始，拒绝新玩家')
                                     conn.close()
                                 break
-                print('her', requstion)
+                # print('her', requstion)
                 if self.isInGame:
                     print('isInGame')
                     if requstion['type'] == 'command':
@@ -148,6 +145,15 @@ class RoomServer(myThread):
                         print('sended')
                     elif requstion['type'] == 'bout':
                         self.serverSend(requstion, address)
+                        for i1, i in enumerate(self.users):
+                            if i['userid'] != '-1':
+                                if tuple(i['addr']) == tuple(address):
+                                    if self.users[(i1+1)%len(self.users)]['userid'] == '-1':
+                                        print('电脑AI运行中')
+                                        time.sleep(2)
+                                        self.serverSend(requstion)
+                                        print('电脑谋划结束')
+                                    break
                 else:
                     if requstion['type'] == 'buildserver':
                         requstion['user']['addr'] = address
@@ -180,7 +186,6 @@ class RoomServer(myThread):
                         self.serverSend(requstion)
                     elif requstion['type'] == 'gamebegin':
                         self.isInGame = True
-                        # color = ['red', 'blue', 'green', 'yellow']
                         newUsers = []
                         newUsers_ = []
                         for i in self.map['map']['flags']:
@@ -198,9 +203,10 @@ class RoomServer(myThread):
                             if self.canModify:
                                 self.canModify = False
                                 self.users = newUsers_
+                                self.canModify = True
                                 break
                         info = {'type': 'userstatus', 'users': newUsers}
-                        # self.serverSend(info)
+                        self.serverSend(info)
                         requstion['users'] = newUsers
                         self.serverSend(requstion)
                         print('gamebegin')
@@ -214,9 +220,6 @@ class RoomServer(myThread):
 
     def serverSend(self, command, addressIp=None):
         async def send(i):
-            if self.users[i]['status'] == 0 or 'conn' not in self.users[i]:
-                return
-            print(self.users[i]['userid'])
             tem = self.users[i]['conn']
             tem.send(zlib.compress(json.dumps(command).encode('utf-8')))
 
@@ -226,9 +229,14 @@ class RoomServer(myThread):
         loop = asyncio.get_event_loop()
 
         for i1, i in enumerate(self.users):
-            if addressIp != None:
-                if i['addr'][0] == addressIp[0] and i['addr'][1] == addressIp[1]:
+            if i['userid'] != '-1':
+                if i['status'] == 0 and 'conn' not in i:
                     continue
+                elif addressIp != None:
+                    if tuple(i['addr']) == tuple(addressIp):
+                        continue
+            else:
+                continue
             tasks.append(asyncio.ensure_future(send(i1)))
         try:
             loop.run_until_complete(asyncio.wait(tasks))
@@ -246,8 +254,6 @@ class RoomServer(myThread):
             i[1].close()
 
     def beginGame(self):
-        # if len(self.users) != self.contains:
-        #     return
         print('抛出开始游戏事件 >> qt界面')
         command = {'type': 'gamebegin'}
         self.isInGame = True
