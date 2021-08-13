@@ -170,7 +170,8 @@ class DW(QFrame):
 
     def flush(self):
         self.statusList[0] = 'oil' if self.oil <= float(resource.basicData['gf'][self.track['name']]['oil'])*0.4 else None
-        self.statusList[1] = 'bullect' if self.bullect <= float(resource.basicData['gf'][self.track['name']]['bullect'])*0.4 else None
+        self.statusList[1] = 'bullect' if self.bullect <= float(resource.basicData['gf'][self.track['name']]['bullect'])*0.4 \
+                                          and int(resource.basicData['gf'][self.track['name']]['bullect']) != 0 else None
         self.statusList[2] = 'occupy' if self.occupied else None
         self.statusList[3] = 'loading' if self.loadings else None
         self.statusList[4] = 'supplies' if self.supplies else None

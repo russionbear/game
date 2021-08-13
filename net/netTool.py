@@ -73,7 +73,6 @@ class RoomServer(myThread):
         server_socket.bind(self.serverBind)
         server_socket.listen(9)
 
-
     def run(self) -> None:
         while True:
             conn, address = self.serverSocket.accept()
@@ -119,11 +118,12 @@ class RoomServer(myThread):
                                     if j['addr'][0] == address[0] and j['addr'][1] == address[1]:
                                         self.users[j1]['status'] = 0
                                         break
-                                print('玩家重新连接')
+                                print('玩家断开连接')
                                 break
-                    print('没开发', requstion)
-                    conn.close()
-                    break
+                    print('这里')
+                    # print('没开发', requstion)
+                    # conn.close()
+                    # break
                 except OSError:
                     print('oserror')
                     break
@@ -140,8 +140,13 @@ class RoomServer(myThread):
                                     print('游戏已开始，拒绝新玩家')
                                     conn.close()
                                 break
+                print('her', requstion)
                 if self.isInGame:
+                    print('isInGame')
                     if requstion['type'] == 'command':
+                        self.serverSend(requstion, address)
+                        print('sended')
+                    elif requstion['type'] == 'bout':
                         self.serverSend(requstion, address)
                 else:
                     if requstion['type'] == 'buildserver':
@@ -177,17 +182,30 @@ class RoomServer(myThread):
                         self.isInGame = True
                         # color = ['red', 'blue', 'green', 'yellow']
                         newUsers = []
+                        newUsers_ = []
                         for i in self.map['map']['flags']:
                             for j in self.users:
                                 if j['flag'] == i:
                                     newUsers.append(j.copy())
                                     del newUsers[-1]['conn']
+                                    newUsers_.append(j)
+                                    break
                             else:
-                                newUsers.append({'flag': i, 'hero': 'google', 'username': 'computer', 'userid': '-1', 'status': 1})
-                        # self.users = newUsers
+                                tem_user = {'flag': i, 'hero': 'google', 'username': 'computer', 'userid': '-1', 'status': 1}
+                                newUsers.append(tem_user)
+                                newUsers_.append(tem_user)
+                        while True:
+                            if self.canModify:
+                                self.canModify = False
+                                self.users = newUsers_
+                                break
+                        info = {'type': 'userstatus', 'users': newUsers}
+                        # self.serverSend(info)
                         requstion['users'] = newUsers
                         self.serverSend(requstion)
                         print('gamebegin')
+
+            print('breakkkkkk')
 
         finally:
             # conn.close()
@@ -196,10 +214,10 @@ class RoomServer(myThread):
 
     def serverSend(self, command, addressIp=None):
         async def send(i):
-            if self.users[i]['status'] == 0:
+            if self.users[i]['status'] == 0 or 'conn' not in self.users[i]:
                 return
+            print(self.users[i]['userid'])
             tem = self.users[i]['conn']
-            print('command', self.users)
             tem.send(zlib.compress(json.dumps(command).encode('utf-8')))
 
         tasks = []
@@ -232,8 +250,8 @@ class RoomServer(myThread):
         #     return
         print('抛出开始游戏事件 >> qt界面')
         command = {'type': 'gamebegin'}
-        self.serverSend(command)
         self.isInGame = True
+        self.serverSend(command)
 
 def findRooms():
     prefix = LOCAL_IP.split('.')
