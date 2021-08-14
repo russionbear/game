@@ -255,10 +255,6 @@ class Resource():
             self.userInfo = json.load(f)
 
 resource = Resource()
-# print(resource.userInfo)
-
-# print(resource.makeMap('jjj'))
-
 
 if __name__ == '__main__':
     print(resource.mapScaleList)

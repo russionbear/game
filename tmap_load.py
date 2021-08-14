@@ -49,14 +49,13 @@ class TMap(VMap):
         #                'outcome': 0, 'money': 0, 'hero': 'warhton', 'header_loc': None, 'canBeGua': False, 'bout': 1,
         #                'exp': 2}]
         ####加载地图内部参数
-        userMode = {'flag': 'red', 'enemy': ['blue'], 'action': 'right', 'command_bg': '会战', 'command': '消灭敌方', \
+        userMode = {'flag': 'red', 'action': 'right', 'enemy':[],  'command_bg': '会战', 'command': '消灭敌方', \
                        'outcome': 0, 'money': 999, 'hero': 'google', 'header_loc': None, 'canBeGua': False, 'bout': 0,
                        'exp': 0}
         self.users = users
         for i1, i in enumerate(self.users):
             userMode.update(i)
             self.users[i1] = userMode.copy()
-            # print(self.users)
         self.user = self.users[0]
         self.user['bout'] += 1
         for i in self.users:
@@ -64,14 +63,19 @@ class TMap(VMap):
                 i['action'] = 'right'
             else:
                 i['action'] = 'left'
-        # self.user['action'] = 'left'
         self.globalData = {'income': 1000}
         self.bout = 1
         self.tUser = tUser
+        for i in self.users:
+            if i['flag'] == self.tUser['flag']:
+                self.tUser = i
+                break
         # self.tUser = {'flag': 'blue'}
         #### 开挂
-        self.users[0]['enemy'] == ['blue', 'yellow']
-        self.users[1]['enemy'] == ['red', 'yellow']
+        print(self.users)
+        self.users[0].update({'enemy':['blue', 'yellow']})
+        self.users[1].update({'enemy':['red', 'yellow']})
+        print(self.users)
 
         self.initUI(mapName)
 
@@ -335,7 +339,8 @@ class TMap(VMap):
             command = {'type':self.dwChoosedStatus, 'flag': self.user['flag'], 'road':road}
             self.commands.append(command)
         elif self.dwChoosedStatus == 'stealth':
-            if self.choose_btn_stealth.text() == '下潜':
+            # if self.choose_btn_stealth.text() in ['下潜', '上浮']:
+            if resource.basicData['money']['candiving'][self.dwChoosed.track['name']] == '1':
                 self.dwChoosed.isDiving = not self.dwChoosed.isDiving
             else:
                 self.dwChoosed.isStealth = not self.dwChoosed.isStealth
@@ -440,6 +445,24 @@ class TMap(VMap):
                 choosed.isStealth = not choosed.isStealth
             else:
                 choosed.isDiving = not choosed.isDiving
+
+            if choosed.track['flag'] in self.tUser['enemy'] and (choosed.isDiving or choosed.isStealth):
+                directions = [(-1, 1), (1, 1), (-1, -1), (1, -1)]
+                cols = len(self.map['map'][0])
+                rows = len(self.map['map'])
+                for j in directions:
+                    x, y = j[0] + choosed.mapId[0], j[1] + choosed.mapId[1]
+                    if x < 0 or x >= rows or y < 0 or y >= cols:
+                        continue
+                    if self.pointer_dw[x][y]:
+                        if self.pointer_dw[x][y].track['flag'] not in self.tUser['enemy']:
+                            choosed.show()
+                            break
+                else:
+                    choosed.hide()
+            else:
+                choosed.show()
+
         elif type == 'attacking':
             enemy = self.pointer_dw[command['dw2']['mapId'][0]][command['dw2']['mapId'][1]]
             tem_dw = self.pointer_dw[command['dw1']['mapId'][0]][command['dw1']['mapId'][1]]
@@ -479,16 +502,9 @@ class TMap(VMap):
             choosed.loadings = command['loadings']
             choosed.doBody(ii['action'] + 'G')
             choosed.moved = True
-            for i in command['dws']:
-                tem_dw = DW(self)
-                tem_dw.initUI(
-                    {'usage': 'dw', 'flag': command['flag'], 'action': ii['action'] + 'G', 'name': i['name']})
-                tem_dw.updateByTrack(i)
-                tem_dw.setGeometry(self.pointer_geo[i['mapId'][0]][i['mapId'][1]].geometry())
-                self.pointer_dw[i['mapId'][0]][i['mapId'][1]] = tem_dw
-                tem_dw.show()
-                tem_dw.raise_()
-            # for
+            response = {'type':'unloadShow', 'dws':command['dws'], 'flag':command['flag'], 'action':ii['action']}
+            postEvent = CommandEvent(response)
+            QCoreApplication.postEvent(self, postEvent)
 
         if self.tUser['flag'] not in ii['enemy']:
             for i in command['shouldShow']:
@@ -754,7 +770,6 @@ class TMap(VMap):
             # if count == 0:
             #     return False
             # return True
-        ###巨型坦克+树林 = bug
         elif type == 'showpath':
             for j in self.areaToChoose:
                 j.hide()
@@ -770,28 +785,37 @@ class TMap(VMap):
                 self.clear(None)
                 self.rightMenu.hide()
                 return
-        ####待改进
         elif type == 'showgftargets':
             a0 = data
             for i in self.findChildren(DW):
                 if i.geometry().contains(a0.pos()):
                     end = []
                     max = resource.basicData['gf'][i.track['name']]['gf_maxdistance']
-                    if max == 0 or i.bullect == 0:
-                        return True
                     min = resource.basicData['gf'][i.track['name']]['gf_mindistance']
-                    x1, y1 = i.mapId[0], i.mapId[1]
                     rows = len(self.map['map'])
                     cols = len(self.map['map'][0])
                     directions = [(1, 1), (-1, 1), (-1, -1), (1, -1)]
-
-                    for k in range(int(min), int(max) + 1):
-                        for j in range(k + 1):
-                            for i in directions:
-                                x, y = x1 + j * i[0], y1 + (k - j) * i[1]
-                                if x < 0 or x >= rows or y < 0 or y >= cols or (x, y) in end:
-                                    continue
-                                end.append((x, y))
+                    def gfAreaCount(x1, y1):
+                        for k in range(int(min), int(max) + 1):
+                            for j in range(k + 1):
+                                for i5 in directions:
+                                    x, y = x1 + j * i5[0], y1 + (k - j) * i5[1]
+                                    if x < 0 or x >= rows or y < 0 or y >= cols or (x, y) in end:
+                                        continue
+                                    end.append((x, y))
+                    if max == 0 or i.bullect == 0:
+                        return False
+                    if resource.basicData['gf'][i.track['name']]['attackAftermove'] == '0':
+                        gfAreaCount(i.mapId[0], i.mapId[1])
+                    else:
+                        tem_map = self.areaCount(i)
+                        tem_1 = []
+                        for i61, i6 in enumerate(tem_map):
+                            for i71, i7 in enumerate(i6):
+                                if i7 != -1:
+                                    tem_1.append((i61, i71))
+                        for i in tem_1:
+                            gfAreaCount(i[0], i[1])
                     for i in end:
                         circle = QFrame(self)
                         circle.setStyleSheet('border-radius:5px;border:3px solid rgb(200, 0,0)')
@@ -800,7 +824,6 @@ class TMap(VMap):
                         circle.setGeometry(self.pointer_geo[i[0]][i[1]].geometry())
                         circle.mapId = self.pointer_geo[i[0]][i[1]].mapId
                         self.targetsToChoose['layers'].append(circle)
-
                     return True
             return False
         elif type == 'waiting':
@@ -1505,8 +1528,20 @@ class TMap(VMap):
         if a0.type() == CommandEvent.idType:
             if a0.command['type'] == 'bout':    # %%%%%%%%%
                 self.boutUpdate(True)
-            else:
-                self.dwCommandCpu(a0.command)
+            elif a0.command['type'] == 'unloadShow':
+                for i in a0.command['dws']:
+                    tem_dw = DW(self)
+                    tem_dw.initUI(
+                        {'usage': 'dw', 'flag': a0.command['flag'], 'action': a0.command['action'] + 'G', 'name': i['name']},
+                        i['mapId'])
+                    tem_dw.updateByTrack(i)
+                    tem_dw.setGeometry(self.pointer_geo[i['mapId'][0]][i['mapId'][1]].geometry())
+                    self.pointer_dw[i['mapId'][0]][i['mapId'][1]] = tem_dw
+                    tem_dw.show()
+                    tem_dw.raise_()
+
+            elif a0.command['type'] == 'command':
+                self.dwCommandCpu(a0.command['command'])
             a0.accept()
             return True
         return super(TMap, self).event(a0)
@@ -1861,18 +1896,20 @@ class TMap(VMap):
         for i, i1 in enumerate(self.users):
             if i1['flag'] == self.tUser['flag']:
                 break
+        print(i1)
         for i in self.findChildren(DW):
             i.show()
             if i.track['flag'] in i1['enemy'] and (i.isDiving or i.isStealth):
+                print('fsder')
                 for j in directions:
                     x, y = j[0]+i.mapId[0], j[1]+i.mapId[1]
                     if x <0 or x >=rows or y < 0 or y >= cols:
                         continue
                     if self.pointer_dw[x][y]:
                         if self.pointer_dw[x][y].track['flag'] not in i1['enemy']:
-
                             break
                 else:
+                    print('hide')
                     i.hide()
 
         self.isRun = True
@@ -1902,12 +1939,11 @@ class TMap(VMap):
                 self.client.close()
                 break
             if response['type'] == 'command':
-                postEvent = CommandEvent(response['command'])
+                postEvent = CommandEvent(response)
                 QCoreApplication.postEvent(self, postEvent)
             elif response['type'] == 'bout':
                 postEvent = CommandEvent(response)
                 QCoreApplication.postEvent(self, postEvent)
-
             elif response['type'] == 'gameover':
                 pass
         self.isClientThreadEnd = True
@@ -1916,7 +1952,6 @@ class TMap(VMap):
         def send():
             newCommand = {'type':'command', 'command':command}
             self.client.send(zlib.compress(json.dumps(newCommand).encode('utf-8')))
-            print("sssssedd", newCommand)
         if self.client:
             myThread(target=send).start()
 
@@ -1927,10 +1962,10 @@ class CommandEvent(QEvent):
         self.command = command
 
 if __name__ == '__main__':
-    hereusers = [{'flag': 'red', 'enemy': ['blue'], 'action': 'right', 'command_bg': '会战', 'command': '消灭敌方', \
+    hereusers = [{'flag': 'red', 'enemy': ['blue', 'yellow'], 'action': 'right', 'command_bg': '会战', 'command': '消灭敌方', \
                    'outcome': 0, 'money': 99999, 'hero': 'google', 'header_loc': None, 'canBeGua': False, 'bout': 1,
                    'exp': 2}, \
-                  {'flag': 'blue', 'enemy': ['red'], 'action': 'left', 'command_bg': '会战', 'command': '消灭敌方', \
+                  {'flag': 'blue', 'enemy': ['red', 'yellow'], 'action': 'left', 'command_bg': '会战', 'command': '消灭敌方', \
                    'outcome': 0, 'money': 0, 'hero': 'warhton', 'header_loc': None, 'canBeGua': False, 'bout': 1,
                    'exp': 2}]
     window = TMap(users=hereusers, tUser=hereusers[0])
