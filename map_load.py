@@ -347,8 +347,8 @@ class VMap(QWidget):
 
     def mapAdjust(self):
         move_x, move_y = (self.mapBlockSize[0]*self.mapSize[0]-self.width())//2, (self.mapBlockSize[1]*self.mapSize[1]-self.height())//2
-        if move_y <0 or move_x < 0:
-            self.mapMove(-move_x, -move_y, True)
+        move_x, move_y = -move_x - self.pointer_geo[0][0].x(), -move_y - self.pointer_geo[0][0].y()
+        self.mapMove(move_x, move_y, True)
 
     def mapMove(self, x, y, isforce=False):
         def move(x, y):

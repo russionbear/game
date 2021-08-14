@@ -1,7 +1,10 @@
 import random
+import threading
+import time
 
 from PyQt5 import QtCore, QtGui
-from PyQt5.Qt import QApplication, QWidget, QLabel, QPixmap
+from PyQt5.QtMultimedia import QMediaPlaylist, QMediaContent, QMediaPlayer, QSound
+from PyQt5.Qt import QApplication, QWidget, QLabel, QPixmap, QUrl, QPushButton
 import sys
 import os
 import json
@@ -56,6 +59,23 @@ class Resource():
 
         # self.makeUser()
         self.readUserInfo()
+
+        # self.initPlayer()
+
+    def initPlayer(self):
+
+        self.playlist = QMediaPlaylist()  # 1
+        self.player = QMediaPlayer()
+        self.player.setPlaylist(self.playlist)
+
+        self.playlist.addMedia(QMediaContent(QUrl.fromLocalFile('E:\workspace\game\\resource\sounds\move_fighter.mp3')))  # 2
+        # self.playlist.addMedia(QMediaContent(QUrl.fromLocalFile('/Users/louis/Downloads/music2.mp3')))
+        # self.playlist.addMedia(QMediaContent(QUrl.fromLocalFile('/Users/louis/Downloads/music3.mp3')))
+        self.playlist.setPlaybackMode(QMediaPlaylist.Sequential)  # 3
+        self.playlist.setCurrentIndex(0)  # 4
+
+        self.player.setVolume(100)  # 5
+        self.player.play()
 
     def readImageData(self):
         '''for developer'''
@@ -256,8 +276,22 @@ class Resource():
 
 resource = Resource()
 
+class music(QWidget):
+    def __init__(self):
+        super(music, self).__init__()
+
+        self.sound = QSound('E:\workspace\game\\resource\sounds\move_fighter.wav', self)  # 1
+        self.sound.setLoops(99999)
+        self.play_btn = QPushButton('Play Sound', self)
+        self.play_btn.clicked.connect(self.sound.play)  #
+
+
+
+
+
 if __name__ == '__main__':
-    print(resource.mapScaleList)
-    window = QWidget()
+    # print(resource.mapScaleList)
+    window = music()
     window.show()
+    # resource.player.play()
     sys.exit(Qapp.exec_())

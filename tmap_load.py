@@ -131,6 +131,7 @@ class TMap(VMap):
                                True if self.mapBlockSize[1]*self.mapSize[1]>self.height() else False)
         x, y = (self.width()-self.mapBlockSize[0]*self.mapSize[0])//2, (self.height()-self.mapBlockSize[1]*self.mapSize[1])//2
         self.mapMove(x, y, True)
+        self.isCtrlDown = False
 
         self.dwsListWidget = None
 
@@ -235,7 +236,6 @@ class TMap(VMap):
         self.infoView = InfoView(self)
         self.infoView.show()
         self.infoView.hide()
-        # self.isCtrlDown = False
 
         actions = {}
         for i in self.users:
@@ -1007,6 +1007,7 @@ class TMap(VMap):
             tem_btn_1.clicked.connect(functools.partial(self.dwCpu, 'buied', 'sure'))
             layout.addRow(tem_btn_1, tem_bnt_2)
             self.dwsListWidget.setLayout(layout)
+            # self.dwsListWidget.
             self.dwsListWidget.show()
             self.choosePathMenu.hide()
             self.choose_status = None
@@ -1250,6 +1251,11 @@ class TMap(VMap):
 
     '''选择， 移动， 缩放'''
     def mousePressEvent(self, a0: QtGui.QMouseEvent) -> None:
+        if a0.y() < self.height()//2:
+            if a0.x() < self.width()//2:
+                self.Head.move(self.width()-self.Head.width(), 0)
+            else:
+                self.Head.move(0, 0)
         if not self.isRun:
             return
         self.canRightMenuShow = True
@@ -1508,7 +1514,10 @@ class TMap(VMap):
                     self.pointer_dw[i][j].move(x+self.pointer_dw[i][j].x(), y+self.pointer_dw[i][j].y())
 
     def wheelEvent(self, a0: QtGui.QWheelEvent=None) -> None:
-        if not self.isRun:
+        if self.isCtrlDown:
+            self.mapScale(True if a0.angleDelta().y() > 0 else False)
+            self.mapAdjust()
+            self.Head.move(0, 0)
             return
         if self.choose_status != 'pathshowed':
             return
@@ -1542,7 +1551,6 @@ class TMap(VMap):
     def keyReleaseEvent(self, a0: QtGui.QKeyEvent) -> None:
         if a0.key() == Qt.Key_Control:
             self.isCtrlDown = False
-            self.infoView.hide()
 
     def event(self, a0: QtCore.QEvent) -> bool:
         if a0.type() == CommandEvent.idType:
