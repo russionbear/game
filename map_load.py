@@ -182,7 +182,7 @@ class DW(QFrame):
         keys1 = ['blood', 'oil', 'bullect', 'occupied', 'isStealth', 'isDiving', 'loadings', 'supplies', 'moved', 'mapId', 'name']
         keys2 = [self.bloodValue, self.oil, self.bullect, self.occupied, self.isStealth, \
                  self.isDiving, self.loadings, self.supplies, self.moved, self.mapId, self.track['name']]
-        track = {'isAlive':True}
+        track = {'isAlive':True, 'action':self.track['action'], 'flag':self.track['flag']}
         for i, j in enumerate(keys1):
             if j in keys or not keys:
                 track[j] = keys2[i]

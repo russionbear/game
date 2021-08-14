@@ -55,7 +55,7 @@ class basicEditW(QMainWindow):
         dws = self.getInitData('dw')
         hero = ['warhton', 'google']
         attrs = ['move_distance', 'view_distance', 'gf_g', 'gf_f', 'gf_mindistance', 'gf_maxdistance', 'money', 'oil', 'bullect', 'skill_dsc']
-        attrs_1 = ['money', 'chineseName', 'classify', 'canoccupy', 'candiving', 'canloading', 'cansupply', 'canstealth', 'canlaymine', 'daycost']
+        attrs_1 = ['money', 'chineseName', 'classify', 'canoccupy', 'candiving', 'canloading', 'cansupply', 'canstealth', 'canlaymine', 'daycost', 'dsc']
 
         self.data_move = QTableWidget(self)
         self.data_move.setColumnCount(len(geos)+1)

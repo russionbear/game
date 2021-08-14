@@ -232,9 +232,9 @@ class TMap(VMap):
         self.Head.show()
         self.Head.raise_()
 
-        # self.infoView = QListWidget(self)
-        # self.infoView.show()
-        # self.infoView.hide()
+        self.infoView = InfoView(self)
+        self.infoView.show()
+        self.infoView.hide()
         # self.isCtrlDown = False
 
         actions = {}
@@ -247,6 +247,8 @@ class TMap(VMap):
 
         self.childWindow = QWidget()
         self.childWindow.setWindowModality(Qt.ApplicationModal)
+
+        # self.setMouseTracking(True)
 
     def judgement(self, dw:DW, endP, command={}):
         if not endP or not self.pointer_dw[endP[0]][endP[1]]:
@@ -1186,6 +1188,7 @@ class TMap(VMap):
         tem_thread.start()
 
     def clear(self, toChooseStatus):
+        self.infoView.hide()
         if toChooseStatus == 'return':
             if self.choose_status == 'unloadingshow':
                 for i in self.planToUnload['layers']:
@@ -1448,6 +1451,16 @@ class TMap(VMap):
                 self.clear(None)
             else:
                 self.clear('return')
+        elif a0.button() == 4:
+            self.clear(None)
+            for i in self.findChildren(DW):
+                if i.contains(a0.pos()):
+                    self.infoView.updateInfo(i.makeTrack())
+                    self.infoView.move(a0.pos())
+                    self.infoView.show()
+                    self.infoView.raise_()
+                    self.choose_status = 'showDwInfo'
+                    break
 
     def mouseReleaseEvent(self, a0: QtGui.QMouseEvent) -> None:
         if not self.isRun:
@@ -1456,6 +1469,8 @@ class TMap(VMap):
         if a0.button() == 2:
             if self.hasMove:
                 if self.canRightMenuShow:
+                    # if not self.infoView.isHidden():
+                    #     self.infoView.hide()
                     if not self.dwCpu('showgftargets', a0):
                         x, y = a0.x(), a0.y()
                         if a0.x() + self.rightMenu.width() > self.width():
@@ -1468,6 +1483,11 @@ class TMap(VMap):
             self.hasMove = None
 
     def mouseMoveEvent(self, a0: QtGui.QMouseEvent) -> None:
+        # if a0.pos().x() < self.width() // 2:
+        #     self.Head.move(0, 0)
+        # else:
+        #     self.Head.move(self.width() - self.Head.width(), 0)
+        # print('tack')
         if not self.isRun:
             return
         self.canRightMenuShow = False
@@ -1896,11 +1916,9 @@ class TMap(VMap):
         for i, i1 in enumerate(self.users):
             if i1['flag'] == self.tUser['flag']:
                 break
-        print(i1)
         for i in self.findChildren(DW):
             i.show()
             if i.track['flag'] in i1['enemy'] and (i.isDiving or i.isStealth):
-                print('fsder')
                 for j in directions:
                     x, y = j[0]+i.mapId[0], j[1]+i.mapId[1]
                     if x <0 or x >=rows or y < 0 or y >= cols:
@@ -1909,7 +1927,6 @@ class TMap(VMap):
                         if self.pointer_dw[x][y].track['flag'] not in i1['enemy']:
                             break
                 else:
-                    print('hide')
                     i.hide()
 
         self.isRun = True
@@ -1954,6 +1971,72 @@ class TMap(VMap):
             self.client.send(zlib.compress(json.dumps(newCommand).encode('utf-8')))
         if self.client:
             myThread(target=send).start()
+
+class InfoView(QFrame):
+    def __init__(self, parent):
+        super(InfoView, self).__init__(parent)
+        self.initUI()
+
+    def updateInfo(self, track):
+        self.head.setPixmap(resource.find({'usage':'dw', 'name':track['name'], 'flag':track['flag'], 'action':'left'})['pixmap'].scaled(80, 80))
+        self.dsc.setText(track['name']+'\n'+resource.basicData['money']['dsc'][track['name']])
+        stealth = '是' if track['isStealth'] else '否'
+        diving = '是' if track['isDiving'] else '否'
+        self.infoLabel.setText('规模:'+str(int(track['blood']))+'    '+'弹药:'+str(int(track['bullect']))+'    '+'油量:'+str(int(track['oil']))+'\n'\
+                               +'占领:'+str(track['occupied'])+'    '+'隐形:'+stealth+'    '+'下潜:'+diving)
+        for i in self.loadings:
+            i.hide()
+        for i1, i in enumerate(track['loadings']):
+            self.loadings[i1].setIcon(QIcon(resource.find({'usage':'dw', 'name':i['name'], 'flag':i['flag'], 'action':'left'})['pixmap']))
+            self.loadings[i1].setText(i['name']+'('+str(int(i['blood']))+')')
+            self.loadings[i1].show()
+        self.supplies.clear()
+        for i, j in track['supplies'].items():
+            self.supplies.addItem(QListWidgetItem(QIcon(resource.find({'usage':'dw', 'name':i, 'flag':track['flag'], 'action':'left'})['pixmap']), i+'\t'+str(j)))
+        if not track['supplies']:
+            self.planTitle.hide()
+            self.supplies.hide()
+        else:
+            self.supplies.show()
+            self.planTitle.show()
+        if not track['loadings']:
+            for i in self.loading:
+                i.hide()
+        else:
+            for i in self.loading:
+                i.show()
+
+
+    def initUI(self):
+        self.setMinimumSize(200, 200)
+        self.setStyleSheet('border-radius:20px;background-color:white;')
+        self.head = QLabel(self)
+        # self.dsc = QTextEdit(self)
+        self.dsc = QLabel(self)
+        # self.dsc.setLineWrapMode(1)
+        # self.dsc.setWordWrapMode(1)
+        self.infoLabel = QLabel(self)
+        self.loadings = [QPushButton(self), QPushButton(self)]
+        self.loading = []
+        self.supplies = QListWidget(self)
+        layout1 = QBoxLayout(QBoxLayout.LeftToRight)
+        layout1.addWidget(self.head)
+        layout1.addWidget(self.dsc)
+        layout2 = QBoxLayout(QBoxLayout.LeftToRight)
+        tem_titil = QLabel('装载:')
+        layout2.addWidget(tem_titil)
+        layout2.addWidget(self.loadings[0])
+        layout2.addWidget(self.loadings[1])
+        self.loading = [tem_titil, self.loadings[0], self.loadings[1]]
+        layout = QBoxLayout(QBoxLayout.TopToBottom)
+        layout.addLayout(layout1)
+        layout.addWidget(self.infoLabel)
+        layout.addLayout(layout2)
+        self.planTitle = QLabel('计划补给:', self)
+        layout.addWidget(self.planTitle)
+        layout.addWidget(self.supplies)
+        self.setLayout(layout)
+
 
 class CommandEvent(QEvent):
     idType = QEvent.registerEventType()
