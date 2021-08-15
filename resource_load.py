@@ -18,6 +18,7 @@ RecordsPath = 'configure/records.json'
 MapsPath = 'configure/maps.json'
 HafumanPath = 'configure/hafuman.json'
 UserPath = 'configure/userInfo.json'
+SoundPath = 'resource/sounds'
 
 Qapp = QApplication(sys.argv)
 
@@ -28,6 +29,7 @@ class Resource():
         self.basicInfopath = BasicDataPath
         self.recordsPath = RecordsPath
         self.userPath = UserPath
+        self.soundPath = SoundPath
         self.data = []
         self.hafuman = []
         self.maps = []
@@ -60,22 +62,17 @@ class Resource():
         # self.makeUser()
         self.readUserInfo()
 
-        # self.initPlayer()
+        self.initPlayer()
 
     def initPlayer(self):
-
-        self.playlist = QMediaPlaylist()  # 1
-        self.player = QMediaPlayer()
-        self.player.setPlaylist(self.playlist)
-
-        self.playlist.addMedia(QMediaContent(QUrl.fromLocalFile('E:\workspace\game\\resource\sounds\move_fighter.mp3')))  # 2
-        # self.playlist.addMedia(QMediaContent(QUrl.fromLocalFile('/Users/louis/Downloads/music2.mp3')))
-        # self.playlist.addMedia(QMediaContent(QUrl.fromLocalFile('/Users/louis/Downloads/music3.mp3')))
-        self.playlist.setPlaybackMode(QMediaPlaylist.Sequential)  # 3
-        self.playlist.setCurrentIndex(0)  # 4
-
-        self.player.setVolume(100)  # 5
-        self.player.play()
+        self.player = {}
+        tem_data = os.listdir(self.soundPath)
+        for i in tem_data:
+            self.player[i[:-4]] = QSound(self.soundPath+'/'+i)
+            if str(i[:-4]) in ['bao', 'btn']:
+                self.player[i[:-4]].setLoops(1)
+            else:
+                self.player[i[:-4]].setLoops(999999)
 
     def readImageData(self):
         '''for developer'''
@@ -276,22 +273,27 @@ class Resource():
 
 resource = Resource()
 
-class music(QWidget):
-    def __init__(self):
-        super(music, self).__init__()
-
-        self.sound = QSound('E:\workspace\game\\resource\sounds\move_fighter.wav', self)  # 1
-        self.sound.setLoops(99999)
-        self.play_btn = QPushButton('Play Sound', self)
-        self.play_btn.clicked.connect(self.sound.play)  #
-
-
-
-
 
 if __name__ == '__main__':
     # print(resource.mapScaleList)
-    window = music()
+    window = QWidget()
     window.show()
+    btn = QPushButton('plaer1', window)
+    btn.show()
+    btn.clicked.connect(resource.player['move_car'].play)
+    btn.move(0, 0)
+    btn = QPushButton('player2', window)
+    btn.show()
+    btn.clicked.connect(resource.player['move_fighter'].play)
+    btn.move(0, 30)
+
+    btn = QPushButton('stop1', window)
+    btn.show()
+    btn.clicked.connect(resource.player['move_car'].stop)
+    btn.move(0, 60)
+    btn = QPushButton('stop2', window)
+    btn.show()
+    btn.clicked.connect(resource.player['move_fighter'].stop)
+    btn.move(0, 90)
     # resource.player.play()
     sys.exit(Qapp.exec_())

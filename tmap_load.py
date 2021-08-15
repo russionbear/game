@@ -70,12 +70,11 @@ class TMap(VMap):
             if i['flag'] == self.tUser['flag']:
                 self.tUser = i
                 break
-        # self.tUser = {'flag': 'blue'}
         #### 开挂
-        print(self.users)
+        # print(self.users)
         self.users[0].update({'enemy':['blue', 'yellow']})
         self.users[1].update({'enemy':['red', 'yellow']})
-        print(self.users)
+        # print(self.users)
 
         self.initUI(mapName)
 
@@ -121,6 +120,9 @@ class TMap(VMap):
         self.dwUpdater = QTimer(self)
         self.dwUpdater.timeout.connect(self.myUpdate)
         self.dwUpdater.start(1400)
+
+        self.screnMoveAnimate = QParallelAnimationGroup(self)
+        self.isUserTrackOpen = True
 
     def initUI(self, name='test1', parent=None, block=(100, 100), winSize=(800, 800), brother=None):
         super(TMap, self).initUI(name, parent, block, winSize, brother)
@@ -253,10 +255,7 @@ class TMap(VMap):
     def judgement(self, dw:DW, endP, command={}):
         if not endP or not self.pointer_dw[endP[0]][endP[1]]:
             return
-        self.isRun = False
-        # 没有播放声音##################%%%%%%
-        # time.sleep(0.2)
-        self.isRun = True
+        resource.player['bao'].play()
         beginP = dw.mapId
         enemy = self.pointer_dw[endP[0]][endP[1]]
         ###此处忽略英雄加成
@@ -316,6 +315,7 @@ class TMap(VMap):
         command['dw2'] = dw2
 
     def timerStop(self):
+        resource.player['move_'+resource.basicData['money']['sound_move'][self.dwChoosed.track['name']]].stop()
         command = {}
         road = []
         # def doSame():
@@ -430,7 +430,9 @@ class TMap(VMap):
         self.timer.stop()
 
     def commandTimeStop(self, command, choosed, type, scends):
+        resource.player['move_'+resource.basicData['money']['sound_move'][choosed.track['name']]].play()
         time.sleep(scends)
+        resource.player['move_'+resource.basicData['money']['sound_move'][choosed.track['name']]].stop()
         for ii in self.users:
             if ii['flag'] == command['flag']:
                 break
@@ -1070,7 +1072,12 @@ class TMap(VMap):
             else:
                 self.Head_money.setText('$' + str(self.user['money']))
         def handTheSame():
-            self.animeCommandMove(self.pointer_dw[command['road'][0][0]][command['road'][0][1]], command['road'], command['type'], command)
+            # , choosed, actions, type, command
+            if self.isUserTrackOpen:
+                dw = self.pointer_dw[command['road'][0][0]][command['road'][0][1]]
+                self.moveToDw(dw, choosed=dw, actions=command['road'], type=command['type'], command=command)
+            else:
+                self.animeCommandMove(self.pointer_dw[command['road'][0][0]][command['road'][0][1]], command['road'], command['type'], command)
         if command['type'] == 'builddw':
             dw = DW(self)
             dw.initUI({'usage':'dw', 'flag':command['flag'], 'name':command['dw']['name'], 'action':self.users[i1]['action']},)
@@ -1155,12 +1162,15 @@ class TMap(VMap):
         elif actions[-1][1] < actions[0][1]:
             self.dwChoosed.doBody('left')
         group.start()
+        resource.player['move_'+resource.basicData['money']['sound_move'][self.dwChoosed.track['name']]].play()
         self.timerGo((len(actions)-1)*inter_time)
         # qapp.timerGo(len(actions)*inter_time)
 
     def animeCommandMove(self, choosed, actions, type, command):
         # self.moveToDw(choosed)
-        # time.sleep(0.4)
+        # myThread(target=self.moveToDw, kwargs={'dw':choosed}).start()
+        # while self.screnMoveAnimate.state() != 0:
+        #     pass
         inter_time = 200
         group = QSequentialAnimationGroup(self)
         for i in range(len(actions[:-1])):
@@ -1251,6 +1261,10 @@ class TMap(VMap):
 
     '''选择， 移动， 缩放'''
     def mousePressEvent(self, a0: QtGui.QMouseEvent) -> None:
+        if a0.button() == 1:
+            resource.player['btn'].play()
+        if self.screnMoveAnimate.state() != 0:
+            return
         if a0.y() < self.height()//2:
             if a0.x() < self.width()//2:
                 self.Head.move(self.width()-self.Head.width(), 0)
@@ -1572,6 +1586,9 @@ class TMap(VMap):
                 self.dwCommandCpu(a0.command['command'])
             a0.accept()
             return True
+        elif a0.type() == ScreenMovingEnd.idType:
+            # , choosed, actions, type, command
+            self.animeCommandMove(a0.data['choosed'], a0.data['actions'], a0.data['type'], a0.data['command'])
         return super(TMap, self).event(a0)
 
     def canTransport(self, dw:DW, p):
@@ -1586,7 +1603,7 @@ class TMap(VMap):
         # else:
         #     return True
 
-    def moveToDw(self, dw:DW=None):
+    def moveToDw(self, dw:DW=None, **kwargs):
         # dw = self.findChild(DW)
         x, y = self.width()/2 - dw.x(), self.height()/2 - dw.y()
         if self.pointer_geo[0][0].x() + x >= 0:
@@ -1604,17 +1621,24 @@ class TMap(VMap):
                 # j1.move(x+j1.x(), y+j1.y())
                 tem_anime = QPropertyAnimation(j1, b'pos', self)
                 tem_anime.setStartValue(j1.pos())
-                tem_anime.setEndValue(QPoint(x+j1.x(), y+j1.y()))
+                tem_anime.setEndValue(QPoint(int(x+j1.x()), int(y+j1.y())))
                 tem_anime.setDuration(400)
                 anime_group.addAnimation(tem_anime)
                 if self.pointer_dw[i][j]:
                     # self.pointer_dw[i][j].move(x+self.pointer_dw[i][j].x(), y+self.pointer_dw[i][j].y())
                     tem_anime2 = QPropertyAnimation(self.pointer_dw[i][j], b'pos', self)
                     tem_anime2.setStartValue(self.pointer_dw[i][j].pos())
-                    tem_anime2.setEndValue(QPoint(x + self.pointer_dw[i][j].x(), y + self.pointer_dw[i][j].y()))
+                    tem_anime2.setEndValue(QPoint(int(x + self.pointer_dw[i][j].x()), int(y + self.pointer_dw[i][j].y())))
                     tem_anime2.setDuration(400)
                     anime_group.addAnimation(tem_anime2)
+        self.screnMoveAnimate = anime_group
+        def animateStopped():
+            while self.screnMoveAnimate.state() != 0:
+                pass
+            postEvent = ScreenMovingEnd(kwargs)
+            QCoreApplication.postEvent(self, postEvent)
         anime_group.start()
+        myThread(target=animateStopped).start()
 
     def running(self):
         pass
@@ -1980,6 +2004,42 @@ class TMap(VMap):
         if self.client:
             myThread(target=send).start()
 
+    def updateWholeMap(self, map):
+        for i1, i in enumerate(map['map']):
+            for j1, j in enumerate(i):
+                self.pointer_geo[i1][j1].change(track=resource.findByHafuman(j))
+                if self.pointer_dw[i1][j1]:
+                    self.pointer_dw[i1][j1].deleteLater()
+                    self.pointer_dw[i1][j1] = None
+        for i in map['dw']:
+            track = resource.findByHafuman(i['hafuman'])
+            axis = i['axis']
+            track.update(i)
+            dw = DW(self)
+            dw.initUI(track, axis)
+            dw.move(axis[1]*self.mapBlockSize[1], axis[0]*self.mapBlockSize[0])
+            self.pointer_dw[axis[0]][axis[1]] = dw
+
+        for i, i1 in enumerate(self.users):
+            if i1['flag'] == self.tUser['flag']:
+                break
+
+        directions = [(-1, 1), (1, 1), (-1, -1), (1, -1)]
+        cols = len(self.map['map'][0])
+        rows = len(self.map['map'])
+        for i in self.findChildren(DW):
+            i.show()
+            if i.track['flag'] in i1['enemy'] and (i.isDiving or i.isStealth):
+                for j in directions:
+                    x, y = j[0] + i.mapId[0], j[1] + i.mapId[1]
+                    if x < 0 or x >= rows or y < 0 or y >= cols:
+                        continue
+                    if self.pointer_dw[x][y]:
+                        if self.pointer_dw[x][y].track['flag'] not in i1['enemy']:
+                            break
+                else:
+                    i.hide()
+
 class InfoView(QFrame):
     def __init__(self, parent):
         super(InfoView, self).__init__(parent)
@@ -2013,7 +2073,6 @@ class InfoView(QFrame):
         else:
             for i in self.loading:
                 i.show()
-
 
     def initUI(self):
         self.setMinimumSize(200, 200)
@@ -2051,6 +2110,12 @@ class CommandEvent(QEvent):
     def __init__(self, command):
         super(CommandEvent, self).__init__(CommandEvent.idType)
         self.command = command
+
+class ScreenMovingEnd(QEvent):
+    idType = QEvent.registerEventType()
+    def __init__(self, kwargs):
+        super(ScreenMovingEnd, self).__init__(ScreenMovingEnd.idType)
+        self.data = kwargs
 
 if __name__ == '__main__':
     hereusers = [{'flag': 'red', 'enemy': ['blue', 'yellow'], 'action': 'right', 'command_bg': '会战', 'command': '消灭敌方', \
