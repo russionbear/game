@@ -124,6 +124,8 @@ class TMap(VMap):
         self.screnMoveAnimate = QParallelAnimationGroup(self)
         self.isUserTrackOpen = True
 
+        self.mapSizeStatus = 'big'
+
     def initUI(self, name='test1', parent=None, block=(100, 100), winSize=(800, 800), brother=None):
         super(TMap, self).initUI(name, parent, block, winSize, brother)
         self.circle.deleteLater()
@@ -250,7 +252,72 @@ class TMap(VMap):
         self.childWindow = QWidget()
         self.childWindow.setWindowModality(Qt.ApplicationModal)
 
+        self.talkView = QLabel(self)
+        self.talkView.setMaximumWidth(400)
+        # self.talkView.setStyleSheet('border-radius:12px;background-color:white;padding:6px;border-top-left-radius:0;')
+        self.talkView.setFont(QFont('宋体', 22))
+        self.talkView.setWordWrap(True)
+        self.talkView.show()
+        self.talkView.hide()
+        self.talkView.mapId = (0, 0)
+        self.talkView.shouldShow = False
+
+        self.mapScale(True)
+
         # self.setMouseTracking(True)
+
+    def mapScale(self, shouldBigger=True):
+        min, max = 0, 5
+        if ( shouldBigger and self.mapScalePoint == max ) or\
+            (not shouldBigger and self.mapScalePoint == min):   #can scale
+            return
+        primA = self.width() // 2 - self.children()[0].x(), self.height() // 2 - self.children()[0].y()
+        mapBlockSize = resource.mapScaleList[self.mapScalePoint]['body']
+        self.mapScalePoint = max if shouldBigger else min
+        self.mapBlockSize = resource.mapScaleList[self.mapScalePoint]['body']
+        n = self.mapBlockSize[0] / mapBlockSize[0]
+        primA = self.width() // 2 - round(primA[0] * n), self.height() // 2 - round(primA[1] * n)
+        tem_data = resource.mapScaleList[self.mapScalePoint]
+        tem_children = self.findChildren((Geo, DW))
+        for j, i in enumerate(tem_children):
+            i.scale(tem_data)
+            i.move(primA[1] + i.mapId[1] * self.mapBlockSize[1], primA[0] + i.mapId[0] * self.mapBlockSize[0])
+
+        move_x = self.mapSize[0] * self.mapBlockSize[0] - self.width()
+        move_y = self.mapSize[1] * self.mapBlockSize[1] - self.height()
+        self.canMove = True if move_x > 0 else False, True if move_y > 0 else False
+        move_x = 0 if move_x > 0 else -move_x // 2
+        move_y = 0 if move_y > 0 else -move_y // 2
+        self.mapMove(move_x, move_y)
+        self.mapAdjust()
+        if shouldBigger:
+            if self.talkView.shouldShow:
+                self.talkView.show()
+                tem_geo = self.pointer_geo[self.talkView.mapId[0]][self.talkView.mapId[1]]
+                x1, y1 = tem_geo.x()>self.width()//2, tem_geo.y()>self.height()//2
+                if not x1 and not y1:
+                    self.talkView.setStyleSheet(
+                        'background-color:white;padding:6px;border-radius:15px;border-top-left-radius:0;')
+                    x2, y2 = tem_geo.x(), tem_geo.y() + tem_geo.height()
+                elif x1 and not y1:
+                    self.talkView.setStyleSheet(
+                        'background-color:white;padding:6px;border-radius:15px;border-top-right-radius:0;')
+                    x2, y2 = tem_geo.x() - (self.talkView.width() - tem_geo.width()), tem_geo.y() + tem_geo.height()
+                elif not x1 and y1:
+                    self.talkView.setStyleSheet(
+                        'background-color:white;padding:6px;border-radius:15px;border-bottom-left-radius:0;')
+                    x2, y2 = tem_geo.x(), tem_geo.y() - self.talkView.height()
+                elif not x1 and not y1:
+                    self.talkView.setStyleSheet(
+                        'background-color:white;padding:6px;border-radius:15px;border-bottom-right-radius:0;')
+                    x2, y2 = tem_geo.x() - (
+                                self.talkView.width() - tem_geo.width()), tem_geo.y() - self.talkView.height()
+                self.talkView.move(x2, y2)
+            self.Head.show()
+            self.Head.move(0, 0)
+        else:
+            self.talkView.hide()
+            self.Head.hide()
 
     def judgement(self, dw:DW, endP, command={}):
         if not endP or not self.pointer_dw[endP[0]][endP[1]]:
@@ -1526,12 +1593,12 @@ class TMap(VMap):
                 j1.move(x+j1.x(), y+j1.y())
                 if self.pointer_dw[i][j]:
                     self.pointer_dw[i][j].move(x+self.pointer_dw[i][j].x(), y+self.pointer_dw[i][j].y())
+        self.talkView.move(self.talkView.x()+x, self.talkView.y()+y)
 
     def wheelEvent(self, a0: QtGui.QWheelEvent=None) -> None:
         if self.isCtrlDown:
+            self.clear(None)
             self.mapScale(True if a0.angleDelta().y() > 0 else False)
-            self.mapAdjust()
-            self.Head.move(0, 0)
             return
         if self.choose_status != 'pathshowed':
             return
@@ -1638,7 +1705,8 @@ class TMap(VMap):
             postEvent = ScreenMovingEnd(kwargs)
             QCoreApplication.postEvent(self, postEvent)
         anime_group.start()
-        myThread(target=animateStopped).start()
+        if kwargs:
+            myThread(target=animateStopped).start()
 
     def running(self):
         pass
@@ -2040,6 +2108,32 @@ class TMap(VMap):
                 else:
                     i.hide()
 
+    def dwTalk(self, dw:DW, string):
+        dw = self.findChild(DW)
+        self.talkView.setText(string)
+        self.talkView.mapId = dw.mapId
+        tem_geo = self.pointer_geo[self.talkView.mapId[0]][self.talkView.mapId[1]]
+        x1, y1 = tem_geo.x()>self.width()//2, tem_geo.y()>self.height()//2
+        if not x1 and not y1:
+            self.talkView.setStyleSheet('background-color:white;padding:6px;border-radius:15px;border-top-left-radius:0;')
+            x2, y2 = tem_geo.x(), tem_geo.y()+tem_geo.height()
+        elif x1 and not y1:
+            self.talkView.setStyleSheet('background-color:white;padding:6px;border-radius:15px;border-top-right-radius:0;')
+            x2, y2 = tem_geo.x()-(self.talkView.width()-tem_geo.width()), tem_geo.y()+tem_geo.height()
+        elif not x1 and y1:
+            self.talkView.setStyleSheet('background-color:white;padding:6px;border-radius:15px;border-bottom-left-radius:0;')
+            x2, y2 = tem_geo.x(), tem_geo.y()-self.talkView.height()
+        elif not x1 and not y1:
+            self.talkView.setStyleSheet('background-color:white;padding:6px;border-radius:15px;border-bottom-right-radius:0;')
+            x2, y2 = tem_geo.x()-(self.talkView.width()-tem_geo.width()), tem_geo.y()-self.talkView.height()
+        self.talkView.move(x2, y2)
+        self.talkView.show()
+        self.talkView.shouldShow = True
+        self.talkView.raise_()
+
+    def talkManager(self):
+        pass
+
 class InfoView(QFrame):
     def __init__(self, parent):
         super(InfoView, self).__init__(parent)
@@ -2126,6 +2220,7 @@ if __name__ == '__main__':
                    'exp': 2}]
     window = TMap(users=hereusers, tUser=hereusers[0])
     window.show()
+    window.dwTalk(None, 'fsdf123123邓弗里斯快递费就是快乐的风景')
 
     # window.initUI()
     # window.moveToDw()
