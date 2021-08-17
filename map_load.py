@@ -1,4 +1,5 @@
 import json
+import random
 import sys
 from PyQt5 import QtGui
 from PyQt5.Qt import *
@@ -412,6 +413,7 @@ class VMap(QWidget):
         move_y = 0 if move_y > 0 else -move_y//2
         self.mapMove(move_x, move_y)
 
+    #地图修改
     def modify(self, areaGroup, newTrack):
         if newTrack['usage'] == 'dw':
             x1, y1 = areaGroup[0].mapId
@@ -423,6 +425,8 @@ class VMap(QWidget):
             if newTrack['name'] == 'delete' :
                 return
             for i in areaGroup:
+                if int(resource.basicData['move'][newTrack['name']][self.pointer_geo[i.mapId[0]][i.mapId[1]].track['name']]) >= 99:
+                    continue
                 dw = DW(self)
                 dw.initUI(newTrack, i.mapId)
                 dw.scale(resource.mapScaleList[self.mapScalePoint])
@@ -430,7 +434,89 @@ class VMap(QWidget):
                 dw.show()
         elif newTrack['usage'] in ['geo', 'build']:
             for i in areaGroup:
+                tem_dw = self.pointer_dw[i.mapId[0]][i.mapId[1]]
+                if tem_dw:
+                    tem_dw.deleteLater()
+                    self.pointer_dw[i.mapId[0]][i.mapId[1]] = None
+
                 i.change(track=newTrack)
+            cols = len(self.pointer_geo[0])
+            rows = len(self.pointer_geo)
+            direction = [ (-1, 0), (0, 1), (1, 0), (0, -1)]
+            direction_ = ['top', 'right', 'bottom', 'left']
+            for i1, i in enumerate(self.pointer_geo):
+                for j1, j in enumerate(i):
+                    if j.track['name'] == 'road':
+                        should = []
+                        for k1, k in enumerate(direction):
+                            x, y = k[0]+i1, k[1]+j1
+                            if x<0 or x >= rows or y<0 or y >= cols:
+                                continue
+                            if self.pointer_geo[x][y].track['name'] in ['road', 'bridge']:
+                                should.append(direction_[k1])
+                        length = len(should)
+                        if length == 4:
+                            j.change(track=resource.find({'usage':'geo', 'name':'road', 'flag':'', 'action':'center'}))
+                        elif length == 3:
+                            for p1 in direction_:
+                                if p1 not in should:
+                                    j.change(track=resource.find({'usage':'geo', 'name':'road', 'flag':'', 'action':'no-'+p1}))
+                                    break
+                        elif length == 2:
+                            if 'top' in should and 'bottom' in should:
+                                j.change(track=resource.find({'usage': 'geo', 'name': 'road', 'flag': '', 'action': 'vertical'}))
+                            elif 'left' in should and 'right' in should:
+                                j.change(track=resource.find({'usage': 'geo', 'name': 'road', 'flag': '', 'action': 'across'}))
+                            else:
+                                tem_dd = resource.find({'usage': 'geo', 'name': 'road', 'flag': '', 'action': should[0]+'-'+should[1]})
+                                if not tem_dd:
+                                    j.change(track=resource.find({'usage': 'geo', 'name': 'road', 'flag': '', 'action': should[1]+'-'+should[0]}))
+                                else:
+                                    j.change(track=tem_dd)
+                        elif length == 1:
+                            if should[0] in ['left', 'right']:
+                                j.change(track=resource.find({'usage': 'geo', 'name': 'road', 'flag': '', 'action': 'across'}))
+                            else:
+                                j.change(track=resource.find({'usage': 'geo', 'name': 'road', 'flag': '', 'action': 'vertical'}))
+                    elif j.track['name'] == 'bridge':
+                        should = []
+                        for k1, k in enumerate(direction):
+                            x, y = k[0] + i1, k[1] + j1
+                            if x < 0 or x >= rows or y < 0 or y >= cols:
+                                continue
+                            if self.pointer_geo[x][y].track['name'] in ['road', 'bridge']:
+                                should.append(direction_[k1])
+                        length = len(should)
+                        if length in [0, 4]:
+                            j.change(track=resource.find({'usage':'geo', 'name':'bridge', 'flag':'', 'action':'across'}))
+                        elif length == 1:
+                            if should[0] in ['left', 'right']:
+                                j.change(track=resource.find({'usage':'geo', 'name':'bridge', 'flag':'', 'action':'across'}))
+                            else:
+                                j.change(track=resource.find({'usage':'geo', 'name':'bridge', 'flag':'', 'action':'vertical'}))
+                        elif length == 2:
+                            if 'left' in should and 'right' in should:
+                                j.change(track=resource.find({'usage':'geo', 'name':'bridge', 'flag':'', 'action':'across'}))
+                            elif 'top' in should and 'bottom' in should:
+                                j.change(track=resource.find({'usage':'geo', 'name':'bridge', 'flag':'', 'action':'vertical'}))
+                            else:
+                                j.change(track=resource.find({'usage':'geo', 'name':'bridge', 'flag':'', 'action':'across'}))
+                        elif length == 3:
+                            if 'left' in should and 'right' in should:
+                                j.change(track=resource.find({'usage':'geo', 'name':'bridge', 'flag':'', 'action':'across'}))
+                            elif 'top' in should and 'bottom' in should:
+                                j.change(track=resource.find({'usage':'geo', 'name':'bridge', 'flag':'', 'action':'vertical'}))
+                    elif j.track['name'] == 'sea':
+                        should = []
+                        notshould = []
+                        for k1, k in enumerate(direction):
+                            x, y = k[0] + i1, k[1] + j1
+                            if x < 0 or x >= rows or y < 0 or y >= cols:
+                                continue
+                            if self.pointer_geo[x][y].track['name'] not in ['sea', 'rocks', 'sand']:
+                                should.append(direction_[k1])
+                        length = len(should)
+
 
     '''选择， 移动， 缩放'''
     def mousePressEvent(self, a0: QtGui.QMouseEvent) -> None:

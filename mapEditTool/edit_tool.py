@@ -43,7 +43,12 @@ class EditTool(QWidget):
         frame.setFixedSize(winSize[0]//blockSize[0]*blockSize[0], frameHeight)
         for j, i in enumerate(resource.data):
             if 'action' in i:
-                if i['action'] != 'left':
+                # if i['action'] != 'left':
+                if i['name'] == 'sea' and i['action'] != 'center':
+                    continue
+                elif i['name'] == 'road' and i['action'] != 'across':
+                    continue
+                elif i['action'] not in ['left', 'across', '', 'center']:
                     continue
             tem_geo = Geo(frame, newKey=i, mapId=i, brother=self)
             tem_geo.move(j%self.row*self.blockSize[0], j//self.row*self.blockSize[1])
@@ -102,6 +107,7 @@ class EditTool(QWidget):
             if j == data:
                 self.status[0] = i
                 key['usage'] = keys[i]
+                key['flag'] = ''
                 if keys[i] == 'geo':
                     enable(False)
                     self.swap(resource.findAll(key))

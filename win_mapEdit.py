@@ -98,19 +98,19 @@ class EditWin(QMainWindow):
 
 
 if __name__ == '__main__':
-#     window = EditWin()
-#
-#     window.initUI()
-#     window.show()
-#     sys.exit(Qapp.exec_())
-# else:
-    window = QWidget()
-    for i in range(200):
-        for j in range(100):
-            tem_label = QLabel(window)
-            tem_label.move(i*20, j*20)
-            tem_label.setPixmap(resource.find({'usage':'geo', 'name':'tree'})['pixmap'].scaled(20,20))
+    window = EditWin()
 
-
+    window.initUI()
     window.show()
     sys.exit(Qapp.exec_())
+# else:
+#     window = QWidget()
+#     for i in range(200):
+#         for j in range(100):
+#             tem_label = QLabel(window)
+#             tem_label.move(i*20, j*20)
+#             tem_label.setPixmap(resource.find({'usage':'geo', 'name':'tree'})['pixmap'].scaled(20,20))
+#
+#
+#     window.show()
+#     sys.exit(Qapp.exec_())

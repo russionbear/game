@@ -82,6 +82,11 @@ class Resource():
             com = re.sub('\..*', '', i)
             com = com.split('_')
             com_02 = {}
+            if len(com) == 2:
+                com.append('')
+                com.append('')
+            elif len(com) == 3:
+                com.append('')
             for j in range(len(com)):
                 com_02[keys[j]] = com[j]
             com_pm = QPixmap(self.imageRoot+'/'+i)
@@ -272,7 +277,7 @@ class Resource():
             self.userInfo = json.load(f)
 
 resource = Resource()
-
+# resource.makeHafuman()
 
 if __name__ == '__main__':
     # print(resource.mapScaleList)
