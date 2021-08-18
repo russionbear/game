@@ -277,7 +277,7 @@ class Resource():
             self.userInfo = json.load(f)
 
 resource = Resource()
-# resource.makeHafuman()
+resource.makeHafuman()
 
 if __name__ == '__main__':
     # print(resource.mapScaleList)
