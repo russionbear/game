@@ -2220,7 +2220,7 @@ if __name__ == '__main__':
                    'exp': 2}]
     window = TMap(users=hereusers, tUser=hereusers[0])
     window.show()
-    window.dwTalk(None, 'fsdf123123邓弗里斯快递费就是快乐的风景')
+    # window.dwTalk(None, 'fsdf123123邓弗里斯快递费就是快乐的风景')
 
     # window.initUI()
     # window.moveToDw()

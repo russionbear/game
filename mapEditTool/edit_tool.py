@@ -64,39 +64,93 @@ class EditTool(QWidget):
         layout.addLayout(layout2)
         layout.addWidget(area)
 
-        self.bloodSlider = QSlider(Qt.Horizontal, self)
-        self.oilSlider = QSlider(Qt.Horizontal)
-        self.bullectSlider = QSlider(Qt.Horizontal)
-        self.bloodValue = QLabel('规模：100%')
-        self.oilValue = QLabel('燃油：100%')
-        self.bullectValue = QLabel('弹药：100%')
-        # print(self.bloodValue.text(),'jjjj')
-        layout_1 = QBoxLayout(QBoxLayout.LeftToRight)
-        layout_1.addWidget(self.bloodValue)
-        layout_1.addWidget(self.bloodSlider)
-        layout_2 = QBoxLayout(QBoxLayout.LeftToRight)
-        layout_2.addWidget(self.oilValue)
-        layout_2.addWidget(self.oilSlider)
-        layout_3 = QBoxLayout(QBoxLayout.LeftToRight)
-        layout_3.addWidget(self.bullectValue)
-        layout_3.addWidget(self.bullectSlider)
-        sliders = [self.bloodSlider, self.oilSlider, self.bullectSlider]
-        values = [self.bloodValue, self. oilValue, self.bullectValue]
-        for j, i in enumerate(sliders):
-            i.setMaximum(100)
-            i.setSingleStep(10)
-            i.setMinimum(1)
-            i.setValue(100)
-            i.valueChanged.connect(functools.partial(self.valueChange, values[j]))
-
+        keys = ['blood', 'oil', 'bullect', 'ocupied', 'isStealth', 'isDiving', 'loadings', 'supplies']
+        keys_ = ['规模', '油量(%)', '弹药(%)', '占领', '隐身', '下潜', '装载', '补给']
+        self.dwInfo = []
+        layout_4 = QFormLayout()
+        for i1, i in enumerate(keys[0:4]):
+            tem = QSpinBox(self)
+            tem.setMinimum(0)
+            tem.setMaximum(100)
+            layout_4.addRow(keys_[i1],tem)
+            self.dwInfo.append(tem)
+        tem.setMaximum(20)
+        self.dwInfo[0].setMaximum(10)
+        for i1, i in enumerate(keys[4:6]):
+            tem = QCheckBox(self)
+            tem.setChecked(False)
+            layout_4.addRow(keys_[i1+4], tem)
+            self.dwInfo.append(tem)
+        tem = QPushButton('装载', self)
+        tem.clicked.connect(functools.partial(self.selectDws, 'loadings'))
+        self.dwInfo.append(tem)
+        tem_ = QPushButton('补给', self)
+        tem_.clicked.connect(functools.partial(self.selectDws, 'supplies'))
+        self.dwInfo.append(tem_)
+        layout_4_ = QBoxLayout(QBoxLayout.LeftToRight)
+        layout_4_.addWidget(tem)
+        layout_4_.addWidget(tem_)
+        tem_ = QPushButton('重置', self)
+        tem_.clicked.connect(functools.partial(self.selectDws, 'reset'))
+        layout_4.addRow(tem_, layout_4_)
         layout.addSpacing(50)
-        layout.addLayout(layout_1)
-        layout.addLayout(layout_2)
-        layout.addLayout(layout_3)
+        layout.addLayout(layout_4)
 
         self.setLayout(layout)
 
+        self.initLoadingSupplyView()
+
         self.swapBtn1(self.btn1_s[0])
+
+    def initLoadingSupplyView(self):
+        self.loadingSuplyView = QWidget(self)
+        tem = QScrollArea(self.loadingSuplyView)
+        tem_ = QWidget(self.loadingSuplyView)
+        tem_.setFixedSize(400, 400)
+
+        layout = QBoxLayout(QBoxLayout.LeftToRight)
+        layout__ = QBoxLayout(QBoxLayout.LeftToRight)
+        tem_1 = QLabel('单位', tem_)
+        tem_2 = QLabel('规模', tem_)
+        tem_2.shouldHide = True
+        tem_3 = QLabel('数量', tem_)
+        layout__.addWidget(tem_1)
+        layout__.addWidget(tem_2)
+        layout__.addWidget(tem_3)
+        layout.addLayout(layout__)
+        for i in resource.findAll({'usage': 'dw', 'flag': 'red', 'action': 'left'}):
+            layout__ = QBoxLayout(QBoxLayout.LeftToRight)
+            tem_1 = QPushButton(QIcon(i['pixmap']), resource.basicData['money']['chineseName'][i['name']], tem_)
+            tem_1.setStyleSheet('border:none;background:none;')
+            tem_2 = QSpinBox(tem_)
+            tem_2.setMaximum(10)
+            tem_2.setMinimum(1)
+            tem_2.shouldHide = True
+            tem_3 = QSpinBox(tem_)
+            layout__.addWidget(tem_1)
+            layout__.addWidget(tem_2)
+            layout__.addWidget(tem_3)
+            layout.addLayout(layout__)
+        tem_.setLayout(layout)
+        tem.setWidget(tem_)
+        layout_6 = QBoxLayout(QBoxLayout.TopToBottom)
+        layout_6.addWidget(tem)
+        layout_6.addWidget(QPushButton('fsdf', self.loadingSuplyView))
+        # layout_5 = QBoxLayout(QBoxLayout.LeftToRight)
+        # tem = QPushButton('reset', self.loadingSuplyView)
+        # tem.clicked.connect(functools.partial(self.saveOrReset, 'reset'))
+        # layout_5.addWidget(tem)
+        # tem = QPushButton('save', self.loadingSuplyView)
+        # tem.clicked.connect(functools.partial(self.saveOrReset, 'save'))
+        # layout_5.addWidget(tem)
+        # layout_6.addLayout(layout_5)
+        self.loadingSuplyView.setLayout(layout_6)
+
+        self.loadingSuplyView.show()
+        x, y = self.width() - self.loadingSuplyView.width(), self.height() - self.loadingSuplyView.height()
+        # self.loadingSuplyView.move(-x//2, -y//2)
+        self.loadingSuplyView.move(100, 300)
+        self.loadingSuplyView.raise_()
 
     def swapBtn1(self, data):
         key = {}
@@ -162,6 +216,7 @@ class EditTool(QWidget):
         label.setText(text)
 
     def enableSlider(self, type):
+        return
         sliders = [self.bloodSlider, self.oilSlider, self.bullectSlider]
         # values = [self.bloodValue, self. oilValue, self.bullectValue]
         if type == 'dw':
@@ -183,6 +238,33 @@ class EditTool(QWidget):
         track['oil'] = int(self.oilValue.text().split('%')[0].split('：')[1])/10
         track['bullect'] = int(self.bullectValue.text().split('%')[0].split('：')[1])/10
         return track
+
+    def selectDws(self, data):
+        if data == 'loadings':
+            for i in self.loadingSuplyView.findChildren((QLabel, QSpinBox)):
+                if hasattr(i, 'shouldHide'):
+                    i.hide()
+            self.loadingSuplyView.show()
+        elif data == 'supplies':
+            for i in self.loadingSuplyView.findChildren((QLabel, QSpinBox)):
+                if hasattr(i, 'shouldHide'):
+                    i.show()
+            self.loadingSuplyView.show()
+        else:
+            key1 = [10, 100, 100, 0]
+            for i1, i in enumerate(self.dwInfo[0:4]):
+                i.setValue(key1[i1])
+            self.dwInfo[4].setChecked(False)
+            self.dwInfo[5].setChecked(False)
+            for i in self.loadingSuplyView.findChildren(QSpinBox):
+                if hasattr(i, 'shouldHide'):
+                    i.setValue(10)
+                else:
+                    i.setValue(0)
+
+
+    def saveOrReset(self, data):
+        print(data)
 
 
 if __name__ == '__main__':
