@@ -5,7 +5,7 @@
 # @Author    :russionbear
 
 from PyQt5.Qt import *
-from PyQt5 import QtCore
+from PyQt5 import QtCore, QtGui
 from map_load import VMap, Geo, DW, miniVMap
 from resource_load import resource
 import sys, functools, time, hashlib
@@ -105,6 +105,7 @@ class EditTool(QWidget):
 
 
         self.swapBtn1(self.btn1_s[0])
+        self.selectDws('reset')
 
     def swapBtn1(self, data):
         key = {}
@@ -127,7 +128,7 @@ class EditTool(QWidget):
                 enable(True)
                 self.swap(resource.findAll(key))
                 break
-        self.enableSlider(key['usage'])
+        # self.enableSlider(key['usage'])
 
     def swapBtn2(self, data):
         keys = ['geo', 'build', 'dw']
@@ -169,29 +170,29 @@ class EditTool(QWidget):
         text = text.split('：')[0] + '：' + str(value) + '%'
         label.setText(text)
 
-    def enableSlider(self, type):
-        return
-        sliders = [self.bloodSlider, self.oilSlider, self.bullectSlider]
-        # values = [self.bloodValue, self. oilValue, self.bullectValue]
-        if type == 'dw':
-            for i in sliders:
-                i.setEnabled(True)
-        elif type == 'geo':
-            for i in sliders:
-                i.setEnabled(False)
-        elif type == 'build':
-            for i in sliders[1:]:
-                i.setEnabled(False)
-            sliders[0].setEnabled(True)
+    # def enableSlider(self, type):
+    #     return
+    #     sliders = [self.bloodSlider, self.oilSlider, self.bullectSlider]
+    #     # values = [self.bloodValue, self. oilValue, self.bullectValue]
+    #     if type == 'dw':
+    #         for i in sliders:
+    #             i.setEnabled(True)
+    #     elif type == 'geo':
+    #         for i in sliders:
+    #             i.setEnabled(False)
+    #     elif type == 'build':
+    #         for i in sliders[1:]:
+    #             i.setEnabled(False)
+    #         sliders[0].setEnabled(True)
 
-    def getChoosedValue(self):
-        if not self.choosed:
-            return None
-        track = self.choosed.copy()
-        track['blood'] = int(self.bloodValue.text().split('%')[0].split('：')[1])/10
-        track['oil'] = int(self.oilValue.text().split('%')[0].split('：')[1])/10
-        track['bullect'] = int(self.bullectValue.text().split('%')[0].split('：')[1])/10
-        return track
+    # def getChoosedValue(self):
+    #     if not self.choosed:
+    #         return None
+    #     track = self.choosed.copy()
+    #     track['blood'] = int(self.bloodValue.text().split('%')[0].split('：')[1])/10
+    #     track['oil'] = int(self.oilValue.text().split('%')[0].split('：')[1])/10
+    #     track['bullect'] = int(self.bullectValue.text().split('%')[0].split('：')[1])/10
+    #     return track
 
     def selectDws(self, data):
         if data == 'loadings':
@@ -210,35 +211,83 @@ class EditTool(QWidget):
             self.choosedSupplies = {}
 
     def getChoosedData(self):
-        end = {}
-        key1 = ['bullect', 'oil', 'bullect', 'occupied', 'isStealth', 'isDiving', 'loadings', 'supplies']
-        for i1, i in (self.dwInfo[0:4]):
+        if not self.choosed:
+            return None
+        if self.choosed['name'] == 'delete':
+            # print(self.choosed)
+            return {'track':self.choosed}
+        if self.choosed['usage'] in ['geo', 'build']:
+            return {'track':self.choosed}
+        end = {'moved':False, 'moved':False, 'mapId':False}
+        key1 = ['blood', 'oil', 'bullect', 'occupied', 'isStealth', 'isDiving', 'loadings', 'supplies']
+        for i1, i in enumerate(self.dwInfo[0:4]):
             end[key1[i1]] = i.value()
         end[key1[4]] = self.dwInfo[4].isChecked()
         end[key1[5]] = self.dwInfo[5].isChecked()
-        end[key1[6]] = self.choosedLoadings
-        #%%%%%%%%%%%%%%%%%%%
+        loadings = []
+        tem_key = resource.basicData['money']['canloading'][self.choosed['name']]
+        max = int(tem_key[0])
+        while True:
+            max -= 1
+            if max < 0:
+                break
+            for i, j in self.choosedLoadings.items():
+                if j <=0:
+                    continue
+                elif j > int(resource.basicData['money']['money'][i]):
+                    guimo = 10
+                    self.choosedLoadings[i] -= int(resource.basicData['money']['money'][i])
+                else:
+                    guimo = j//int(resource.basicData['money']['money'][i])
+                if guimo == 0 or (i not in tem_key and resource.basicData['money']['classify'][self.choosed['name']] not in tem_key):
+                    continue
+                track = {'blood':guimo, 'oil':int(resource.basicData['gf'][i]['oil']), 'bullect':int(resource.basicData['gf'][i]['bullect']), \
+                         'occupied':0, 'isStealth':False, 'isDiving':False, 'name':i, 'flag':self.choosed['flag']}
+                loadings.append(track)
+            else:
+                break
+        end[key1[6]] = loadings
         end[key1[7]] = self.choosedSupplies
-        end['track'] = None
-        if self.choosed:
-            end['track'] = self.choosed.makeTrack()
+        end['oil'] = int(end['oil']/100*int(resource.basicData['gf'][self.choosed['name']]['oil']))
+        end['bullect'] = int(end['bullect']/100*int(resource.basicData['gf'][self.choosed['name']]['bullect']))
+        if resource.basicData['money']['canoccupy'][self.choosed['name']] == '0':
+            end['occupied'] = 0
+        if resource.basicData['money']['canstealth'][self.choosed['name']] == '0':
+            end['isStealth'] = False
+        if resource.basicData['money']['candiving'][self.choosed['name']] == '0':
+            end['isDiving'] = False
+        if resource.basicData['money']['cansupply'][self.choosed['name']] == '0':
+            end['supplies'] = {}
+        end['track'] = self.choosed
         return end
 
-
-
+    def saveLS(self, view, type):
+        end = {}
+        for i in view.findChildren(QSpinBox):
+            end[i.name] = int(i.value())
+        if type == 'loadings':
+            self.choosedLoadings = end
+        else:
+            self.choosedSupplies = end
+        view.deleteLater()
 
 
 class EditMap(VMap):
-    def __init__(self):
-        super(EditMap, self).__init__()
+    def __init__(self, name='test', parent=None, block=(100, 100), winSize=(800, 800), brother=None):
+        super(EditMap, self).__init__(parent)
+        self.brother = brother
+        self.initUI(name, block, winSize)
 
-    def initUI(self, name='test', parent=None, block=(100, 100), winSize=(800, 800), brother=None):
+        self.dwUpdater = QTimer(self)
+        self.dwUpdater.timeout.connect(self.myUpdate)
+        self.dwUpdater.start(1400)
+
+    def initUI(self, name, block, winSize):
         self.setFixedSize(winSize[0], winSize[1])
         self.map = resource.findMap(name)
         if not self.map:
             print(self.map, 'error', name)
             sys.exit()
-        self.setParent(parent)
         self.mapSize = len(self.map['map'][0]), len(self.map['map'])
         self.mapBlockSize = block
 
@@ -293,8 +342,6 @@ class EditMap(VMap):
             dw.initUI(track, axis)
             dw.move(axis[1]*block[1], axis[0]*block[0])
             self.pointer_dw[axis[0]][axis[1]] = dw
-
-        self.brother = brother
 
     def mapAdjust(self):
         move_x, move_y = (self.mapBlockSize[0]*self.mapSize[0]-self.width())//2, (self.mapBlockSize[1]*self.mapSize[1]-self.height())//2
@@ -364,13 +411,19 @@ class EditMap(VMap):
         self.mapMove(move_x, move_y)
 
     #地图修改
-    def modify(self, areaGroup, newTrack):
+    def modify(self, areaGroup, tTrack):
+        if tTrack == None:
+            return
+        newTrack = tTrack['track']
         cols = len(self.pointer_geo[0])
         rows = len(self.pointer_geo)
         direction = [(-1, 0), (0, 1), (1, 0), (0, -1)]
         direction_ = ['top', 'right', 'bottom', 'left']
         if newTrack['usage'] == 'dw':
-            x1, y1 = areaGroup[0].mapId
+            try:
+                x1, y1 = areaGroup[0].mapId
+            except IndexError:
+                return
             x2, y2 = areaGroup[-1].mapId
             dws = self.findChildren(DW)
             for i in dws:
@@ -385,6 +438,7 @@ class EditMap(VMap):
                 dw.initUI(newTrack, i.mapId)
                 dw.scale(resource.mapScaleList[self.mapScalePoint])
                 dw.move(i.x(), i.y())
+                dw.updateByTrack(tTrack)
                 dw.show()
         elif newTrack['usage'] in ['geo', 'build']:
             for i in areaGroup:
@@ -583,6 +637,62 @@ class EditMap(VMap):
                             j.change(
                                 track=resource.find({'usage': 'geo', 'name': 'plain', 'flag': ''}))
 
+    def mousePressEvent(self, a0: QtGui.QMouseEvent) -> None:
+        if a0.button() == 1 and not self.hasMove:
+            self.hasCircle = a0.pos()
+            self.circle.setParent(self)
+            self.circle.setGeometry(a0.x(), a0.y(), 1, 1)
+            self.circle.show()
+        elif a0.button() == 2 and not self.hasCircle:
+            self.hasMove = a0.pos()
+
+    def mouseReleaseEvent(self, a0: QtGui.QMouseEvent) -> None:
+        if a0.button() == 1:
+            self.circle.hide()
+            self.circle.setParent(None)
+            x2, y2 = a0.x(), a0.y()
+            x1, y1 = self.hasCircle.x(), self.hasCircle.y()
+
+            x1, x2 = (x1, x2) if x1<=x2 else (x2, x1)
+            y1, y2 = (y1, y2) if y1<=y2 else (y2, y1)
+            end = []
+            for i in self.children():
+                if hasattr(i, 'inRect'):
+                    if i.inRect(x1, x2, y1, y2):
+                        end.append(i)
+
+            ##dw...
+            self.circled = end
+            if self.brother:
+                if self.brother.choosed:
+                    self.modify(end, self.brother.getChoosedData())
+
+            # print(len(end))
+            self.hasCircle = False
+        elif a0.button() == 2:
+            self.hasMove = False
+
+    def mouseMoveEvent(self, a0: QtGui.QMouseEvent) -> None:
+        if self.hasMove:
+            x, y = self.hasMove.x()-a0.x(), self.hasMove.y()-a0.y()
+            self.mapMove(-x, -y)
+            self.hasMove = a0.pos()
+        elif self.hasCircle:
+            x1, x2 = (self.hasCircle.x() , a0.x()) if self.hasCircle.x() < a0.x() else (a0.x(), self.hasCircle.x())
+            y1, y2 = (self.hasCircle.y() , a0.y()) if self.hasCircle.y() < a0.y() else (a0.y(), self.hasCircle.y())
+            self.circle.setGeometry(x1, y1, x2-x1, y2-y1)
+
+    def wheelEvent(self, a0: QtGui.QWheelEvent) -> None:
+        if self.hasCircle or self.hasMove :
+            return
+        self.mapScale(True if a0.angleDelta().y()>0 else False)
+
+    def myUpdate(self):
+        for j in self.findChildren(DW):
+            if j:
+                j.flush()
+                j.myUpdate()
+
 class EditWin(QMainWindow):
     def initUI(self, mapName='test1'):
         mapMenu = self.menuBar().addMenu('地图')
@@ -598,8 +708,8 @@ class EditWin(QMainWindow):
         self.center = QWidget(self)
         self.tool = EditTool()
         self.tool.initUi(mainWin=self)
-        self.vmap = EditMap()
-        self.vmap.initUI(mapName, self.center, brother=self.tool)
+        self.vmap = EditMap(mapName, self.center, brother=self.tool)
+        # self.vmap.initUI()
         layout = QBoxLayout(QBoxLayout.LeftToRight)
         layout.addWidget(self.tool)
         layout.addWidget(self.vmap)
@@ -608,7 +718,7 @@ class EditWin(QMainWindow):
         self.setCentralWidget(self.center)
 
         self.modeLSView = self.modeSkim = self.modeModify = None
-        self.showLSView()
+        # self.showLSView()
 
     def skimMap(self):
         self.modeSkim = SkimWin()
@@ -624,6 +734,10 @@ class EditWin(QMainWindow):
 
     def showLSView(self, data={}, type='loadings'):
         self.modeLSView = QWidget()
+        if type == 'loadings':
+            self.setWindowTitle('装载')
+        else:
+            self.setWindowTitle('计划补给')
         self.modeLSView.setWindowModality(QtCore.Qt.ApplicationModal)
         self.modeLSView.setFixedSize(250, 600)
         keys = resource.basicData['geo']['canbuild']['factory']
@@ -660,11 +774,9 @@ class EditWin(QMainWindow):
         tem_btn_1 = QPushButton('保存')
         if self.tool:
             tem_btn_1.clicked.connect(functools.partial(self.tool.saveLS, self.modeLSView, type))
-        # tem_btn_1.clicked.connect(self.modeLSView.deleteLater)
         layout.addWidget(tem_btn_1)
         self.modeLSView.setLayout(layout)
         self.modeLSView.show()
-
 
     def modifyMap(self, mapName=None):
         if not mapName:

@@ -191,16 +191,16 @@ class DW(QFrame):
 
     def updateByTrack(self, track):
         '''不处理isAlive, name'''
-        self.bloodValue = self.bloodValue if not track['blood'] else track['blood']
-        self.oil = self.oil if not track['oil'] else track['oil']
-        self.bullect = self.bullect if not track['bullect'] else track['bullect']
+        self.bloodValue = self.bloodValue if 'blood' not in track else track['blood']
+        self.oil = self.oil if 'oil' not in track else track['oil']
+        self.bullect = self.bullect if 'bullect' not in track else track['bullect']
         self.occupied = self.occupied if 'occupied' not in track else track['occupied']
         self.isStealth = self.isStealth if not track['isStealth'] else track['isStealth']
         self.isDiving = self.isDiving if not track['isDiving'] else track['isDiving']
         self.loadings = self.loadings if not track['loadings'] else track['loadings']
         self.supplies = self.supplies if not track['supplies'] else track['supplies']
-        self.moved = self.moved if not track['moved'] else track['moved']
-        self.mapId = self.mapId if not track['mapId'] else track['mapId']
+        self.moved = self.moved if 'moved' not in track else track['moved']
+        # self.mapId = self.mapId if not track['mapId'] else track['mapId']
 
 class Geo(QLabel):
     def __init__(self, parent, newKey={}, mapId=None, brother=None):
