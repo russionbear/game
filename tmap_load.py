@@ -50,7 +50,7 @@ class TMap(VMap):
         #                'exp': 2}]
         ####加载地图内部参数
         userMode = {'flag': 'red', 'action': 'right', 'enemy':[],  'command_bg': '会战', 'command': '消灭敌方', \
-                       'outcome': 0, 'money': 999, 'hero': 'google', 'header_loc': None, 'canBeGua': False, 'bout': 0,
+                       'outcome': 0, 'money': 999, 'hero': 'google', 'header_loc': None, 'canBeGua': False, 'isOver':False, 'bout': 0,
                        'exp': 0}
         self.users = users
         for i1, i in enumerate(self.users):
@@ -1712,7 +1712,6 @@ class TMap(VMap):
         pass
 
     def isVictory(self):
-        newusers = []
         for i in self.users:
             if i['header_loc']:
                 tem = self.pointer_geo[i['header_loc'][0]][i['header_loc'][1]]
@@ -1724,37 +1723,31 @@ class TMap(VMap):
                         if j.track['usage'] == 'build':
                             if j.track['flag'] == tem.track['flag']:
                                 j.change(track=resource.find({'usgae':'build', 'name':j.track['name'], 'flag':tem.track['flag']}))
-                else:
-                    newusers.append(i)
+                    i['isOver'] = True
+                # else:
+                #     newusers.append(i)
             else:
                 for j in self.findChildren(DW):
                     if j.track['flag'] == i['flag']:
                         i['canBeGua'] = True
-                        newusers.append(i)
+                        # newusers.append(i)
                         break
                 else:
-                    if not i['canBeGua']:
-                        newusers.append(i)
+                    if i['canBeGua']:
+                        i['isOver'] = True
 
-        self.users = newusers
-        # print(self.users)
         for i in self.users:
-            if i['flag'] == self.tUser['flag']:
-                break
-        else:
-            print('你输了')
-            time.sleep(99999)
-        dws = {}
+            if i['flag'] == self.tUser['flag'] and i['isOver']:
+                print('你输了')
+
+        count = 0
         for i in self.users:
-            if not i['canBeGua']:
-                dws[i['flag']] = 1
-            else:
-                dws[i['flag']] = 0
-        for i in self.findChildren(DW):
-            dws[i.track['flag']] += 1
-        if len(dws) <= 1:
-            print(dws[0]['flag'],' is victory!\ngame is already over!')
-            sys.exit()
+            if not i['isOver']:
+                count += 1
+        if count <= 1:
+            print('game is over')
+            return True
+
         return False
 
     def chooseRightMenu(self, data):
@@ -1879,8 +1872,8 @@ class TMap(VMap):
 
     def myUpdate(self):
         self.Head.raise_()
-        # if self.isVictory():
-        #     pass          # %%%%%
+        if self.isVictory():
+            pass          # %%%%%
         for j in self.findChildren(DW):
             if j:
                 j.flush()
@@ -1907,6 +1900,8 @@ class TMap(VMap):
         for i1, i in enumerate(self.users):
             if i == self.user:
                 self.user = self.users[(i1+1)%len(self.users)]
+                if self.user['isOver']:
+                    self.user = self.users[(i1+2)%len(self.users)]
                 break
         else:
             print('error')

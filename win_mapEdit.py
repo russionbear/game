@@ -7,6 +7,7 @@
 from PyQt5.Qt import *
 from PyQt5 import QtCore, QtGui
 from map_load import VMap, Geo, DW, miniVMap
+from tmap_load import TMap
 from resource_load import resource
 import sys, functools, time, hashlib
 
@@ -694,6 +695,12 @@ class EditMap(VMap):
                 j.myUpdate()
 
 class EditWin(QMainWindow):
+    def __init__(self):
+        super(EditWin, self).__init__()
+        self.roles = {}
+        self.JC = []
+        self.initUI()
+
     def initUI(self, mapName='test1'):
         mapMenu = self.menuBar().addMenu('地图')
         mapMenu.addAction('打开').triggered.connect(self.skimMap)
@@ -701,6 +708,26 @@ class EditWin(QMainWindow):
         mapMenu.addAction('新建').triggered.connect(self.newMap)
         mapMenu.addAction('修改').triggered.connect(self.modifyMap)
         mapMenu.addAction('保存').triggered.connect(self.saveMap)
+
+        #加成， 英雄限制，目的限制， 资金， 最大支出， 台词，
+        mapMenu = self.menuBar().addMenu('台词')
+        mapMenu.addAction('默认').triggered.connect(functools.partial(self.linesCpu, 'now'))
+        mapMenu.addSeparator()
+        mapMenu.addAction('浏览').triggered.connect(functools.partial(self.linesCpu, 'skim'))
+        mapMenu.addAction('添加').triggered.connect(functools.partial(self.linesCpu, 'add'))
+
+        mapMenu = self.menuBar().addMenu('音效')
+        mapMenu.addAction('当前音效').triggered.connect(functools.partial(self.soundCpu, 'now'))
+        mapMenu.addSeparator()
+        mapMenu.addAction('浏览').triggered.connect(functools.partial(self.soundCpu, 'skim'))
+        mapMenu.addAction('制作').triggered.connect(functools.partial(self.soundCpu, 'add'))
+
+        mapMenu = self.menuBar().addMenu('规则')
+        mapMenu.addAction('故事背景').triggered.connect(functools.partial(self.ruleCpu, 'story'))
+        mapMenu.addSeparator()
+        # mapMenu.addAction('角色设定').triggered.connect(functools.partial(self.ruleCpu, 'role'))
+        mapMenu.addAction('制作加成').triggered.connect(functools.partial(self.ruleCpu, 'powers'))
+        mapMenu.addAction('计划事件').triggered.connect(functools.partial(self.ruleCpu, 'plan'))   ##触发（单位阵亡，建筑占领， 敌军进入指定区域） 曾兵，减兵， 更改加成
 
         self.pages = {}
         self.statusBar().showMessage('lalal')
@@ -719,6 +746,7 @@ class EditWin(QMainWindow):
 
         self.modeLSView = self.modeSkim = self.modeModify = None
         # self.showLSView()
+        self.tmpView = None
 
     def skimMap(self):
         self.modeSkim = SkimWin()
@@ -820,6 +848,142 @@ class EditWin(QMainWindow):
         self.center.setLayout(layout)
         self.vmap.move(self.tool.width(), 0)
         self.setCentralWidget(self.center)
+
+    def linesCpu(self, key):
+        print(key)
+        '''
+            开战前
+            主城附近，
+            收入支出，
+            故事背景
+            局势，
+            单位：侦查，补给，下潜，隐身，计划补给，体力，油量，弹药，攻击范围，所在地形，安全系数+可攻击目标，
+            随机
+        '''
+
+    def soundCpu(self, key):
+        pass
+
+    def ruleCpu(self, key, data=None):
+        print(key, data)
+        if key == 'story':
+            self.tmpView = QWidget()
+            self.tmpView.setWindowModality(Qt.ApplicationModal)
+            self.tmpView.data = {'red': {'command':'', 'heros':[]}, 'blue':{'command':'', 'heros':[]}, 'green':{'command':'', 'heros':[]}, 'yellow':{'command':'', 'heros':[]}}
+            self.tmpView.now = 'red'
+            layout = QHBoxLayout()
+            layout_ = QVBoxLayout()
+            tem_ = QComboBox(self.tmpView)
+            tem_.addItems(['1', '2', '3', '4'])
+            tem_.setCurrentIndex(3)
+            tem_.currentIndexChanged.connect(functools.partial(self.ruleCpu, 'story_roles'))
+            layout_.addWidget(tem_)
+            for i in ['red', 'blue', 'green', 'yellow']:
+                tem_ = QPushButton('    ', self.tmpView)
+                tem_.clicked.connect(functools.partial(self.ruleCpu, 'story_role', i))
+                tem_.setStyleSheet('background-color:'+i+';')
+                layout_.addWidget(tem_)
+            tem_ = QTextEdit(self.tmpView)
+            tem_.setPlaceholderText('故事背景')
+            layout.addWidget(tem_)
+            layout.addLayout(layout_)
+            layout_1 = QVBoxLayout()
+            tem_ = QTextEdit(self.tmpView)
+            tem_.setPlaceholderText('为角色设定任务')
+            layout_1.addWidget(tem_)
+            layout_3 = QVBoxLayout()
+            tem_ = QComboBox(self.tmpView)
+            tem_.addItem('全部')
+            for i in resource.findAll({'usage':'hero', 'action':'head'}):
+                tem_.addItem(QIcon(i['pixmap']), i['name'])
+            tem_.currentIndexChanged.connect(functools.partial(self.ruleCpu, 'story_hero'))
+            layout_3.addWidget(tem_)
+            tem_ = QPushButton('重置', self.tmpView)
+            tem_.clicked.connect(functools.partial(self.ruleCpu, 'story_clear'))
+            layout_3.addWidget(tem_)
+            layout_2 = QHBoxLayout()
+            layout_2.addLayout(layout_3)
+            tem_ = QListWidget(self.tmpView)
+            for i in resource.findAll({'usage':'hero', 'action':'head'}):
+                tem_.addItem(QListWidgetItem(QIcon(i['pixmap']), i['name']))
+            layout_2.addWidget(tem_)
+            layout_1.addLayout(layout_2)
+            tem_ = QPushButton('OK', self.tmpView)
+            tem_.clicked.connect(functools.partial(self.ruleCpu, 'story_save'))
+            layout_1.addWidget(tem_)
+            layout.addLayout(layout_1)
+            self.tmpView.setLayout(layout)
+            self.tmpView.show()
+        elif key == 'story_roles':
+            self.tmpView.data[self.tmpView.now]['command'] = self.tmpView.findChildren(QTextEdit)[1].toPlainText()
+            heros = []
+            view = self.tmpView.findChild(QListWidget)
+            for i in range(view.count()):
+                heros.append(view.item(i).text())
+            self.tmpView.data[self.tmpView.now]['heros'] = heros
+            children = self.tmpView.findChildren(QPushButton)[0:4]
+            for i in children[0:data+1]:
+                i.show()
+            for i in children[data+1:]:
+                i.hide()
+            self.tmpView.findChildren(QTextEdit)[1].setText(self.tmpView.data['red']['command'])
+            self.tmpView.now = 'red'
+            view.clear()
+            for i in self.tmpView.data['red']['heros']:
+                view.addItem(QListWidgetItem(QIcon(resource.find({'usage':'hero', 'name':i, 'action':'head'})['pixmap']), i))
+        elif key == 'story_role':
+            self.tmpView.data[self.tmpView.now]['command'] = self.tmpView.findChildren(QTextEdit)[1].toPlainText()
+            heros = []
+            view = self.tmpView.findChild(QListWidget)
+            for i in range(view.count()):
+                heros.append(view.item(i).text())
+            self.tmpView.data[self.tmpView.now]['heros'] = heros
+            self.tmpView.now = data
+            self.tmpView.findChildren(QTextEdit)[1].setText(self.tmpView.data[data]['command'])
+            view.clear()
+            for i in self.tmpView.data[data]['heros']:
+                view.addItem(QListWidgetItem(QIcon(resource.find({'usage':'hero', 'name':i, 'action':'head'})['pixmap']), i))
+        elif key == 'story_hero':
+            name = self.tmpView.findChildren(QComboBox)[1].currentText()
+            view = self.tmpView.findChild(QListWidget)
+            if name == '全部':
+                view.clear()
+                for i in resource.findAll({'usage':'hero', 'action':'head'}):
+                    view.addItem(QListWidgetItem(QIcon(i['pixmap']), i['name']))
+                return
+            for i in range(view.count()):
+                if view.item(i).text() == name:
+                    return
+            view.addItem(QListWidgetItem(QIcon(resource.find({'usage':'hero', 'name':name, 'action':'head'})['pixmap']), name))
+        elif key == 'story_clear':
+            view = self.tmpView.findChild(QListWidget)
+            view.clear()
+            self.tmpView.data[self.tmpView.now]['heros'] = []
+        elif key == 'story_save':
+            self.tmpView.data[self.tmpView.now]['command'] = self.tmpView.findChildren(QTextEdit)[1].toPlainText()
+            heros = []
+            view = self.tmpView.findChild(QListWidget)
+            for i in range(view.count()):
+                heros.append(view.item(i).text())
+            self.tmpView.data[self.tmpView.now]['heros'] = heros
+            dd = int(self.tmpView.findChild(QComboBox).currentText())
+            self.roles = {}
+            bg = self.tmpView.findChildren(QTextEdit)[0].toPlainText()
+            for i, j in self.tmpView.data.items():
+                if dd <= 0:
+                    break
+                self.tmpView.data[i]['command_bg'] = bg
+                dd -= 1
+            self.roles = self.tmpView.data
+            self.tmpView.close()
+
+        elif key == 'role':
+            if not self.roles:
+                return
+        elif key == 'powers':
+            pass
+
+
 
 ##nav
 class newWin(QWidget):
@@ -991,7 +1155,6 @@ class SkimWin(QWidget):
 if __name__ == '__main__':
     window = EditWin()
 
-    window.initUI()
     window.show()
     sys.exit(Qapp.exec_())
 # else:
