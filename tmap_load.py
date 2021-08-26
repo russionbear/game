@@ -1597,8 +1597,9 @@ class TMap(VMap):
 
     def wheelEvent(self, a0: QtGui.QWheelEvent=None) -> None:
         if self.isCtrlDown:
-            self.clear(None)
-            self.mapScale(True if a0.angleDelta().y() > 0 else False)
+            if self.isRun:
+                self.clear(None)
+                self.mapScale(True if a0.angleDelta().y() > 0 else False)
             return
         if self.choose_status != 'pathshowed':
             return
@@ -1873,6 +1874,7 @@ class TMap(VMap):
     def myUpdate(self):
         self.Head.raise_()
         if self.isVictory():
+            print('game over')
             pass          # %%%%%
         for j in self.findChildren(DW):
             if j:

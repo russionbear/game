@@ -277,6 +277,8 @@ class EditMap(VMap):
     def __init__(self, name='test', parent=None, block=(100, 100), winSize=(800, 800), brother=None):
         super(EditMap, self).__init__(parent)
         self.brother = brother
+        self.isTargetChoosing = False
+        self.targetChoosedLayer = []
         self.initUI(name, block, winSize)
 
         self.dwUpdater = QTimer(self)
@@ -641,6 +643,10 @@ class EditMap(VMap):
     def mousePressEvent(self, a0: QtGui.QMouseEvent) -> None:
         if a0.button() == 1 and not self.hasMove:
             self.hasCircle = a0.pos()
+            # try:
+            #     self.circle.setParent(self)
+            # except AttributeError:
+            #     pass
             self.circle.setParent(self)
             self.circle.setGeometry(a0.x(), a0.y(), 1, 1)
             self.circle.show()
@@ -663,8 +669,24 @@ class EditMap(VMap):
                         end.append(i)
 
             ##dw...
-            self.circled = end
-            if self.brother:
+            if self.isTargetChoosing:
+                for i in end:
+                    if i not in self.circled:
+                        self.circled.append(i)
+            else:
+                self.circled = end
+            if self.isTargetChoosing:
+                for i in self.targetChoosedLayer:
+                    i.deleteLater()
+                self.targetChoosedLayer = []
+                for i in self.circled:
+                    j = i.mapId
+                    circle = QFrame(self)
+                    circle.setStyleSheet('border-radius:5px;border:3px solid rgb(100, 100,200)')
+                    circle.show()
+                    circle.setGeometry(self.pointer_geo[j[0]][j[1]].geometry())
+                    self.targetChoosedLayer.append(circle)
+            elif self.brother:
                 if self.brother.choosed:
                     self.modify(end, self.brother.getChoosedData())
 
@@ -684,9 +706,35 @@ class EditMap(VMap):
             self.circle.setGeometry(x1, y1, x2-x1, y2-y1)
 
     def wheelEvent(self, a0: QtGui.QWheelEvent) -> None:
-        if self.hasCircle or self.hasMove :
+        if self.hasCircle or self.hasMove or self.isTargetChoosing:
             return
         self.mapScale(True if a0.angleDelta().y()>0 else False)
+
+    def keyReleaseEvent(self, a0: QtGui.QKeyEvent) -> None:
+        if a0.key() == Qt.Key_Return:
+            end = []
+            for i in self.circled:
+                end.append(tuple(i.mapId))
+            self.parent().parent().targetChoosed(end)                
+            for i in self.targetChoosedLayer:
+                i.deleteLater()
+            self.circled = []
+            self.targetChoosedLayer = []
+            self.isTargetChoosing = False
+        elif a0.key() == Qt.Key_Escape:
+            self.parent().parent().targetChoosed()             
+            for i in self.targetChoosedLayer:
+                i.deleteLater()
+            self.targetChoosedLayer = []
+            self.circled = []
+            self.isTargetChoosing = False
+        else:
+            pass
+        # a0.accept()
+            # return super(EditMap, self).keyReleaseEvent(a0)
+
+    def enterTargetChoose(self):
+        self.isTargetChoosing = True
 
     def myUpdate(self):
         for j in self.findChildren(DW):
@@ -698,7 +746,9 @@ class EditWin(QMainWindow):
     def __init__(self):
         super(EditWin, self).__init__()
         self.roles = {}
-        self.JC = []
+        self.JC = {}
+        self.CF = []
+        self.targetChooseStatus = None
         self.initUI()
 
     def initUI(self, mapName='test1'):
@@ -725,9 +775,9 @@ class EditWin(QMainWindow):
         mapMenu = self.menuBar().addMenu('规则')
         mapMenu.addAction('故事背景').triggered.connect(functools.partial(self.ruleCpu, 'story'))
         mapMenu.addSeparator()
-        # mapMenu.addAction('角色设定').triggered.connect(functools.partial(self.ruleCpu, 'role'))
+        mapMenu.addAction('胜利条件').triggered.connect(functools.partial(self.ruleCpu, 'role'))
         mapMenu.addAction('制作加成').triggered.connect(functools.partial(self.ruleCpu, 'powers'))
-        mapMenu.addAction('计划事件').triggered.connect(functools.partial(self.ruleCpu, 'plan'))   ##触发（单位阵亡，建筑占领， 敌军进入指定区域） 曾兵，减兵， 更改加成
+        mapMenu.addAction('制作触发器').triggered.connect(functools.partial(self.ruleCpu, 'plan'))   ##触发（单位阵亡，建筑占领， 敌军进入指定区域） 曾兵，减兵， 更改加成
 
         self.pages = {}
         self.statusBar().showMessage('lalal')
@@ -893,7 +943,7 @@ class EditWin(QMainWindow):
             layout_1.addWidget(tem_)
             layout_3 = QVBoxLayout()
             tem_ = QComboBox(self.tmpView)
-            tem_.addItem('全部')
+            tem_.addItem('全部英雄')
             for i in resource.findAll({'usage':'hero', 'action':'head'}):
                 tem_.addItem(QIcon(i['pixmap']), i['name'])
             tem_.currentIndexChanged.connect(functools.partial(self.ruleCpu, 'story_hero'))
@@ -901,6 +951,8 @@ class EditWin(QMainWindow):
             tem_ = QPushButton('重置', self.tmpView)
             tem_.clicked.connect(functools.partial(self.ruleCpu, 'story_clear'))
             layout_3.addWidget(tem_)
+            # tem_ = QComboBox(self.tmpView)
+            # for i in ['阻拦', '抵达', '保护', '击杀', '占领', '防守', '']
             layout_2 = QHBoxLayout()
             layout_2.addLayout(layout_3)
             tem_ = QListWidget(self.tmpView)
@@ -946,7 +998,7 @@ class EditWin(QMainWindow):
         elif key == 'story_hero':
             name = self.tmpView.findChildren(QComboBox)[1].currentText()
             view = self.tmpView.findChild(QListWidget)
-            if name == '全部':
+            if name == '全部英雄':
                 view.clear()
                 for i in resource.findAll({'usage':'hero', 'action':'head'}):
                     view.addItem(QListWidgetItem(QIcon(i['pixmap']), i['name']))
@@ -980,8 +1032,232 @@ class EditWin(QMainWindow):
         elif key == 'role':
             if not self.roles:
                 return
+            self.tmpView = QWidget()
+            self.tmpView.setWindowModality(Qt.ApplicationModal)
+            self.tmpView.setWindowTitle('设定目标')
+            layout = QVBoxLayout()
+            layout_ = QHBoxLayout()
+            for i in ['目标类型','阻拦', '抵达', '保护', '击杀', '占领', '防守', '最大资金损失', '最小敌军损失']:
+                layout_.addWidget(QLabel(i))
+            layout.addLayout(layout_)
+            for i in self.roles.keys():
+                layout_ = QHBoxLayout()
+                tem_btn = QPushButton(' 重置 ', self.tmpView)
+                tem_btn.setStyleSheet('background-color:'+i+';')
+                tem_btn.clicked.connect(functools.partial(self.ruleCpu, 'role_reset', i))
+                layout_.addWidget(tem_btn)
+                tem_btn = QPushButton('选择区域', self.tmpView)
+                tem_btn.flag = i
+                tem_btn.clicked.connect(functools.partial(self.ruleCpu, 'role_choose', tem_btn))
+                layout_.addWidget(tem_btn)
+                tem_btn = QPushButton('选择区域', self.tmpView)
+                tem_btn.flag = i
+                tem_btn.clicked.connect(functools.partial(self.ruleCpu, 'role_choose', tem_btn))
+                layout_.addWidget(tem_btn)
+                tem_btn = QPushButton('选择单位', self.tmpView)
+                tem_btn.flag = i
+                tem_btn.clicked.connect(functools.partial(self.ruleCpu, 'role_choose', tem_btn))
+                layout_.addWidget(tem_btn)
+                tem_btn = QPushButton('选择单位', self.tmpView)
+                tem_btn.flag = i
+                tem_btn.clicked.connect(functools.partial(self.ruleCpu, 'role_choose', tem_btn))
+                layout_.addWidget(tem_btn)
+                tem_btn = QPushButton('选择建筑', self.tmpView)
+                tem_btn.flag = i
+                tem_btn.clicked.connect(functools.partial(self.ruleCpu, 'role_choose', tem_btn))
+                layout_.addWidget(tem_btn)
+                tem_btn = QPushButton('选择建筑', self.tmpView)
+                tem_btn.flag = i
+                tem_btn.clicked.connect(functools.partial(self.ruleCpu, 'role_choose', tem_btn))
+                layout_.addWidget(tem_btn)
+                # layout_.addWidget(QPushButton('选择区域', self.tmpView))
+                # layout_.addWidget(QPushButton('选择单位', self.tmpView))
+                # layout_.addWidget(QPushButton('选择单位', self.tmpView))
+                # layout_.addWidget(QPushButton('选择建筑', self.tmpView))
+                # layout_.addWidget(QPushButton('选择建筑', self.tmpView))
+                tem_btn = QSpinBox(self.tmpView)
+                tem_btn.flag = i
+                tem_btn.setSingleStep(1000)
+                tem_btn.setMinimum(-1)
+                tem_btn.setMaximum(999999999)
+                tem_btn.setValue(-1)
+                layout_.addWidget(tem_btn)
+                tem_btn = QSpinBox(self.tmpView)
+                tem_btn.flag = i
+                tem_btn.setSingleStep(1000)
+                tem_btn.setMinimum(-1)
+                tem_btn.setValue(-1)
+                tem_btn.setMaximum(999999999)
+                layout_.addWidget(tem_btn)
+                layout.addLayout(layout_)
+            tem_btn = QPushButton('ok', self.tmpView)
+            tem_btn.clicked.connect(functools.partial(self.ruleCpu, 'role_ok'))
+            layout.addWidget(tem_btn)
+            self.tmpView.setLayout(layout)
+            self.tmpView.show()
+        elif key == 'role_choose':
+            self.tmpView.choose = data
+            self.vmap.enterTargetChoose()
+            self.tmpView.hide()
+        elif key == 'role_reset':
+            end = []
+            for i1, i in enumerate(self.roles.keys()):
+                if i == data:
+                    for j in self.tmpView.children():
+                        if hasattr(j, 'flag'):
+                            end.append(j)
+                    break
+            for i in end[0:6]:
+                i.data = None
+            end[0].setText('选择区域')
+            end[1].setText('选择区域')
+            end[2].setText('选择单位')
+            end[3].setText('选择单位')
+            end[4].setText('选择建筑')
+            end[5].setText('选择建筑')
+            end[6].setValue(-1)
+            end[7].setValue(-1)
+        elif key == 'role_ok':
+            end = {}
+            for i in self.roles.keys():
+                end[i] = []
+            for i in self.tmpView.findChildren((QPushButton, QSpinBox)):
+                if hasattr(i, 'flag'):
+                    end[i.flag].append(i)
+            typeForCF = ['inarea', 'beinarea', 'beattack', 'attack', 'occupy', 'beoccupy', 'maxloss', 'mindamage']
+            for i, j in end.items():
+                for j1, j2 in enumerate(j[:-3]):
+                    if j2.text() == '已选择':
+                        cf = {'type':typeForCF[j1], 'owner':i, 'data':j2.data}
+                        self.CF.append(cf)
+                for j1, j2 in enumerate(j[-2:]):
+                    if j2.value() != -1:
+                        cf = {'type':typeForCF[j1+6], 'owner':i, 'data':j2.value()}
+                        self.CF.append(cf)
+            ## toggle:{type, data, ower}
+            # print(self.CF)
+            self.tmpView.deleteLater()
+
         elif key == 'powers':
+            MAX = 8
+            self.tmpView = QWidget()
+            self.tmpView.setWindowModality(Qt.ApplicationModal)
+            self.tmpView.setWindowTitle('制作加成')
+            tem_table = QTableWidget(self.tmpView)
+            dws = resource.findAll({'usage':'dw', 'flag':'red', 'action':'left'})
+            tem_table.setColumnCount(len(dws)+1)
+            tem_table.setRowCount(MAX)
+            tem_table.setHorizontalHeaderItem(0, QTableWidgetItem('id'))
+            for i, j in enumerate(dws):
+                tem_table.setHorizontalHeaderItem(i+1, QTableWidgetItem(QIcon(j['pixmap']), j['name']))
+            for i in range(MAX):
+                for j in range(len(dws)+1):
+                    tem_table.setItem(i, j, QTableWidgetItem(''))
+            layout = QVBoxLayout()
+            layout.addWidget(QLabel('加成的影响范围'))
+            layout.addWidget(tem_table)
+            tem_table = QTableWidget(self.tmpView)
+            dws = ['move_distance', 'view_distance', 'gf_g', 'gf_maxdistance', 'gf_mindistance']
+            tem_table.setColumnCount(len(dws)+1)
+            tem_table.setRowCount(MAX)
+            tem_table.setHorizontalHeaderItem(0, QTableWidgetItem('id'))
+            for i, j in enumerate(dws):
+                tem_table.setHorizontalHeaderItem(i + 1, QTableWidgetItem(j))
+            for i in range(MAX):
+                for j in range(len(dws) + 1):
+                    tem_table.setItem(i, j, QTableWidgetItem(''))
+            layout.addWidget(QLabel('加成的实体'))
+            layout.addWidget(tem_table)
+            tem_table = QPushButton('ok', self.tmpView)
+            tem_table.clicked.connect(functools.partial(self.ruleCpu, 'powers_ok'))
+            layout.addWidget(tem_table)
+            self.tmpView.setLayout(layout)
+            self.tmpView.resize(800 ,400)
+            self.tmpView.show()
+            tables = self.tmpView.findChildren(QTableWidget)
+            for i, j in enumerate(self.JC.keys()):
+                tables[0].item(i, 0).setText(j)
+                tables[1].item(i, 0).setText(j)
+            for i1, i in enumerate(self.JC.keys()):
+                for j in range(1, tables[1].columnCount()):
+                    if tables[1].horizontalHeaderItem(j).text() in self.JC[i]:
+                        tables[1].item(i1, j).setText(str(self.JC[i][tables[1].horizontalHeaderItem(j).text()]))
+                for j in range(1, tables[0].columnCount()):
+                    if tables[0].horizontalHeaderItem(j).text() in self.JC[i]['range']:
+                        tables[0].item(i1, j).setText('1')
+        elif key == 'powers_ok':
+            self.JC = {}
+            self.tmpView.setWindowTitle('制作加成')
+            tables = self.tmpView.findChildren(QTableWidget)
+            for i in range(tables[1].rowCount()):
+                tem_data = tables[1].item(i, 0).text()
+                if tem_data == '':
+                    continue
+                self.JC[tem_data] = {}
+                for j in range(1, tables[1].columnCount()):
+                    try:
+                        tem_data_1 = int(tables[1].item(i, j).text())
+                    except ValueError:
+                        if tables[1].item(i, j).text() != '':
+                            self.tmpView.setWindowTitle('制作加成;error:格式不符')
+                            return
+                        continue
+                    if tem_data_1 == 0:
+                        continue
+                    self.JC[tem_data][tables[1].horizontalHeaderItem(j).text()] = tem_data_1
+
+            for i in range(tables[0].rowCount()):
+                tem_data = tables[0].item(i, 0).text()
+                if tem_data == '':
+                    continue
+                try:
+                    self.JC[tem_data]['range'] = []
+                except KeyError:
+                    self.tmpView.setWindowTitle('制作加成;error:上下id不对应')
+                    return
+                for j in range(1, tables[0].columnCount()):
+                    tem_data_1 = tables[0].item(i, j).text()
+                    if tem_data_1 == '1':
+                        self.JC[tem_data]['range'].append(tables[0].horizontalHeaderItem(j).text())
+            self.tmpView.deleteLater()
+
+        elif key == 'plan':
+            self.tmpView = QWidget()
+            self.tmpView.setWindowTitle('制作触发器')
+            self.tmpView.setWindowModality(Qt.ApplicationModal)
+
+            layout = QVBoxLayout()
+            self.tmpView.setLayout(layout)
+            self.tmpView.show()
+
+    def targetChoosed(self, data=None):
+        try:
+            if self.tmpView.isHidden():
+                self.tmpView.show()
+                if data:
+                    if '单位' in self.tmpView.choose.text():
+                        newData = []
+                        for i in data:
+                            if self.vmap.pointer_dw[i[0]][i[1]]:
+                                newData.append(i)
+                        data = newData
+                    elif '建筑' in self.tmpView.choose.text():
+                        newData = []
+                        for i in data:
+                            if self.vmap.pointer_geo[i[0]][i[1]].track['usage'] == 'build':
+                                newData.append(i)
+                        data = newData
+                    if data:
+                        self.tmpView.choose.data = data
+                        self.tmpView.choose.setText('已选择')
+        except:
             pass
+
+    def keyReleaseEvent(self, a0: QtGui.QKeyEvent) -> None:
+        if a0.key() in [Qt.Key_Escape, Qt.Key_Return]:
+            self.vmap.keyReleaseEvent(a0)
+        else:
+            return super(EditWin, self).keyReleaseEvent(a0)
 
 
 
