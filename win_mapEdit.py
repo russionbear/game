@@ -8,7 +8,8 @@ from PyQt5.Qt import *
 from PyQt5 import QtCore, QtGui
 from map_load import VMap, Geo, DW, miniVMap
 from tmap_load import TMap
-from resource_load import resource
+# from resource_load import resource
+from resource import resource
 import sys, functools, time, hashlib
 
 Qapp = QApplication(sys.argv)
@@ -274,7 +275,7 @@ class EditTool(QWidget):
 
 
 class EditMap(VMap):
-    def __init__(self, name='test', parent=None, block=(100, 100), winSize=(800, 800), brother=None):
+    def __init__(self, name='default', parent=None, block=(100, 100), winSize=(800, 800), brother=None):
         super(EditMap, self).__init__(parent)
         self.brother = brother
         self.isTargetChoosing = False
@@ -753,7 +754,7 @@ class EditWin(QMainWindow):
         self.targetChooseStatus = None
         self.initUI()
 
-    def initUI(self, mapName='test1'):
+    def initUI(self, mapName='default'):
         mapMenu = self.menuBar().addMenu('地图')
         mapMenu.addAction('打开').triggered.connect(self.skimMap)
         mapMenu.addSeparator()
