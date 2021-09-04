@@ -145,15 +145,17 @@ class basicEditW(QMainWindow):
 
         self.data_geo = QTableWidget(self)
         self.data_geo.setColumnCount(len(geos))
-        self.data_geo.setRowCount(2)
+        self.data_geo.setRowCount(3)
         for i, j in enumerate(geos):
             tem = resource.find({'name': j})
             self.data_geo.setHorizontalHeaderItem(i, QTableWidgetItem(QIcon(tem['pixmap']), j))
         self.data_geo.setVerticalHeaderItem(0, QTableWidgetItem('canbuild'))
         self.data_geo.setVerticalHeaderItem(1, QTableWidgetItem('cansupply'))
+        self.data_geo.setVerticalHeaderItem(2, QTableWidgetItem('chineseName'))
         for j, j1 in enumerate(geos):
             self.data_geo.setItem(0, j, QTableWidgetItem('1'))
             self.data_geo.setItem(1, j, QTableWidgetItem('1'))
+            self.data_geo.setItem(2, j, QTableWidgetItem(''))
             
         self.data_hero_f = QTableWidget(self)
         self.data_hero_f.setColumnCount(len(dws)+2)
