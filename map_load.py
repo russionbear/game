@@ -5,7 +5,8 @@ from PyQt5 import QtGui
 from PyQt5.Qt import *
 from PyQt5.QtCore import QCoreApplication
 from PyQt5 import QtCore
-from resource_load import resource
+# from resource_load import resource
+from resource import resource
 
 '''
 坐标，地图：左边y轴 
@@ -696,7 +697,8 @@ class VMap(QWidget):
             com = []
             for j in range(self.mapSize[0]):
                 tem = geos.__next__()
-                com.append(int(resource.findHafuman(tem.track['base64'])))
+                # com.append(int(resource.findHafuman(tem.track['base64'])))
+                com.append(tem.track['hafuman'])
             map['map'].append(com)
 
         dws = []
@@ -717,12 +719,13 @@ class VMap(QWidget):
     ##初始化地图， 填充，地形窗口， 单位窗口， 科技窗口， 指挥官窗口，save， load
 
 class miniVMap(QWidget):
-    def initUI(self, name='test', parent=None, map=None):
+    def initUI(self, name='default', parent=None, map=None):
         self.map = map
         if not self.map:
             self.map = resource.findMap(name)
         if parent:
             self.setParent(parent)
+        print(self.map)
         self.mapSize = len(self.map['map'][0]), len(self.map['map'])
         self.mapScalePoint = 1
         self.mapBlockSize = resource.mapScaleList[self.mapScalePoint]['body']

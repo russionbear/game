@@ -3,11 +3,12 @@
 # @FileName  :basic_info_edit.py
 # @Time      :2021/7/21 19:48
 # @Author    :russionbear
-import json
+import json, os
 
 from PyQt5.Qt import *
 from PyQt5 import QtCore
-from resource_load import resource
+# from resource_load import resource
+from resource import resource
 import sys
 
 '''
@@ -47,10 +48,17 @@ money模板需要格式化
 
 Qapp = QApplication(sys.argv)
 class basicEditW(QMainWindow):
+    def __init__(self, path='resource/basicInfo.json'):
+        super(basicEditW, self).__init__()
+        self.path = path
+        self.data = {}
+        # self.isPath = True if data == None else False
+        # self.data = data if not self.isPath else {}
+        self.initUI()
+
     def initUI(self):
         self.setWindowTitle('基础数据编辑')
         self.setFixedSize(1280, 800)
-        self.path = 'configure/basic_info.json'
         geos = self.getInitData()
         dws = self.getInitData('dw')
         hero = ['warhton', 'google']
@@ -242,7 +250,8 @@ class basicEditW(QMainWindow):
         self.area.setWidget(self.center)
         self.setCentralWidget(self.area)
 
-        self.readData()
+        if os.path.exists(self.path):
+            self.readData()
 
     def getInitData(self, type='geo'):
         end = []
@@ -261,40 +270,43 @@ class basicEditW(QMainWindow):
                      self.data_gf, self.data_gfGeo_g, self.data_gfGeo_f, self.data_money, self.data_geo, \
                      self.data_hero_f, self.data_hero_1, self.data_hero_2, self.data_hero_3]
         main_data_key = ['move', 'view', 'gf', 'gfGeo_g', 'gfGeo_f', 'money', 'geo', 'hero_f', 'hero_1', 'hero_2', 'hero_3']
-        end = {}
+        # end = {}
         for k1, k in enumerate(main_data):
-            end[main_data_key[k1]] = {}
+            self.data[main_data_key[k1]] = {}
             for i in range(0, k.rowCount()):
-                end[main_data_key[k1]][k.verticalHeaderItem(i).text()] = {}
+                self.data[main_data_key[k1]][k.verticalHeaderItem(i).text()] = {}
                 # print(main_data_key[k1])
                 for j in range(0, k.columnCount()):
                     # print(k.verticalHeaderItem(i), k.horizontalHeaderItem(j))
-                    end[main_data_key[k1]][k.verticalHeaderItem(i).text()][k.horizontalHeaderItem(j).text()] = k.item(i, j).text()
+                    self.data[main_data_key[k1]][k.verticalHeaderItem(i).text()][k.horizontalHeaderItem(j).text()] = k.item(i, j).text()
         # print(end)
+        # if self.isPath:
         with open(self.path, 'w') as f:
-            json.dump(end, f)
+            json.dump(self.data, f)
 
     def readData(self):
         main_data = [self.data_move, self.data_view, \
                      self.data_gf, self.data_gfGeo_g, self.data_gfGeo_f, self.data_money, self.data_geo, \
                      self.data_hero_f, self.data_hero_1, self.data_hero_2, self.data_hero_3]
         main_data_key = ['move', 'view', 'gf', 'gfGeo_g', 'gfGeo_f', 'money', 'geo', 'hero_f', 'hero_1', 'hero_2', 'hero_3']
+        # if self.isPath:
         with open(self.path, 'r') as f:
-            begin = json.load(f)
+            self.data = json.load(f)
         for k1, k in enumerate(main_data):
             for i in range(0, k.rowCount()):
                 for j in range(0, k.columnCount()):
                     try:
-                        if begin[main_data_key[k1]][k.verticalHeaderItem(i).text()][k.horizontalHeaderItem(j).text()] == '':
+                        if self.data[main_data_key[k1]][k.verticalHeaderItem(i).text()][k.horizontalHeaderItem(j).text()] == '':
                             k.item(i, j).setText('0')
                         else:
-                            k.item(i, j).setText(begin[main_data_key[k1]][k.verticalHeaderItem(i).text()][k.horizontalHeaderItem(j).text()])
+                            k.item(i, j).setText(self.data[main_data_key[k1]][k.verticalHeaderItem(i).text()][k.horizontalHeaderItem(j).text()])
                     except KeyError:
                         k.item(i, j).setText('')
 
 
 if __name__ == '__main__':
+    # tem = {'123':123}
     window = basicEditW()
-    window.initUI()
     window.show()
+    # print(tem)
     sys.exit(Qapp.exec_())

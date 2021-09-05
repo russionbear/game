@@ -3,6 +3,7 @@
 # @FileName  :main_window.py
 # @Time      :2021/7/18 14:05
 # @Author    :russionbear
+import json, os, shutil
 
 from PyQt5.Qt import *
 from PyQt5 import QtCore, QtGui
@@ -10,6 +11,7 @@ from map_load import VMap, Geo, DW, miniVMap
 from tmap_load import TMap
 # from resource_load import resource
 from resource import resource
+from win_basicdataEdit import basicEditW
 import sys, functools, time, hashlib
 
 Qapp = QApplication(sys.argv)
@@ -751,7 +753,10 @@ class EditWin(QMainWindow):
         self.CF_ = []
         self.CF = []
         self.lines = {}
+        self.basicData = {}
+        self.basicData_ = {}
         self.targetChooseStatus = None
+        self.tmpBasicKey = None
         self.initUI()
 
     def initUI(self, mapName='default'):
@@ -764,17 +769,15 @@ class EditWin(QMainWindow):
 
         #加成， 英雄限制，目的限制， 资金， 最大支出， 台词，
         mapMenu = self.menuBar().addMenu('台词')
-        # mapMenu.addAction('默认').triggered.connect(functools.partial(self.linesCpu, 'now'))
         mapMenu.addAction('浏览').triggered.connect(functools.partial(self.linesCpu, 'skim'))
         mapMenu.addAction('添加').triggered.connect(functools.partial(self.linesCpu, 'add'))
         mapMenu.addSeparator()
         mapMenu.addAction('组装').triggered.connect(functools.partial(self.linesCpu, 'zz'))
 
-        # mapMenu = self.menuBar().addMenu('音效')
-        # mapMenu.addAction('当前音效').triggered.connect(functools.partial(self.soundCpu, 'now'))
-        # mapMenu.addSeparator()
-        # mapMenu.addAction('浏览').triggered.connect(functools.partial(self.soundCpu, 'skim'))
-        # mapMenu.addAction('制作').triggered.connect(functools.partial(self.soundCpu, 'add'))
+        mapMenu = self.menuBar().addMenu('游戏参数')
+        mapMenu.addAction('基本参数').triggered.connect(functools.partial(self.basicDataCpu, 'basic'))
+        mapMenu.addAction('备用参数').triggered.connect(functools.partial(self.basicDataCpu, 'skim'))
+        mapMenu.addAction('保存').triggered.connect(functools.partial(self.basicDataCpu, 'save'))
 
         mapMenu = self.menuBar().addMenu('规则')
         mapMenu.addAction('故事背景').triggered.connect(functools.partial(self.ruleCpu, 'story'))
@@ -782,6 +785,12 @@ class EditWin(QMainWindow):
         mapMenu.addAction('胜利条件').triggered.connect(functools.partial(self.ruleCpu, 'role'))
         mapMenu.addAction('制作加成').triggered.connect(functools.partial(self.ruleCpu, 'powers'))
         mapMenu.addAction('制作触发器').triggered.connect(functools.partial(self.ruleCpu, 'plan'))
+
+        mapMenu = self.menuBar().addMenu('素材')
+        mapMenu.addAction('素材说明（不可用）').triggered.connect(functools.partial(self.sourceCpu, 'instruction'))
+        mapMenu.addSeparator()
+        mapMenu.addAction('图片').triggered.connect(functools.partial(self.sourceCpu, 'images'))
+        mapMenu.addAction('音效').triggered.connect(functools.partial(self.sourceCpu, 'sounds'))
 
         self.pages = {}
         self.statusBar().showMessage('lalal')
@@ -1103,6 +1112,7 @@ class EditWin(QMainWindow):
             else:
                 self.lines[self.tmpView.name] = self.tmpView.data
             self.tmpView.deleteLater()
+            resource.saveMap(self.vmap.map['name'], lines=self.lines)
         elif key == 'zz':
             if not self.roles:
                 return
@@ -1141,9 +1151,117 @@ class EditWin(QMainWindow):
                 self.roles[i.flag] = i.currentText()
             self.tmpView.deleteLater()
 
+    def basicDataCpu(self, key, data=None):
+        if key == 'skim':
+            if self.tmpView:
+                try:
+                    self.tmpView.deleteLater()
+                except RuntimeError:
+                    pass
+            self.tmpView = QWidget()
+            self.tmpView.setWindowModality(Qt.ApplicationModal)
+            self.tmpView.setWindowTitle('备用参数')
+            layout = QVBoxLayout()
+            tem = QListWidget(self.tmpView)
+            if os.path.exists('maps/'+self.vmap.map['name']+'/basicInfo_.json'):
+                with open('maps/'+self.vmap.map['name']+'/basicInfo_.json', 'r') as f:
+                    self.basicData_ = json.load(f)
+                tem.addItems(list(self.basicData_.keys()))
+            else:
+                with open('maps/' + self.vmap.map['name'] + '/basicInfo_.json', 'w') as f:
+                    json.dump({}, f)
+            tem.doubleClicked.connect(functools.partial(self.basicDataCpu, 'double'))
+            layout.addWidget(tem)
+            layout_ = QHBoxLayout()
+            tem = QPushButton('删除', self.tmpView)
+            tem.clicked.connect(functools.partial(self.basicDataCpu, 'delete'))
+            layout_.addWidget(tem)
+            layout_.addSpacing(30)
+            layout.addWidget(QLineEdit(self.tmpView))
+            tem = QPushButton('添加', self.tmpView)
+            tem.clicked.connect(functools.partial(self.basicDataCpu, 'add'))
+            layout_.addWidget(tem)
+            layout.addLayout(layout_)
+            self.tmpView.setLayout(layout)
+            self.tmpView.show()
 
-    def soundCpu(self, key):
-        pass
+        elif key == 'basic':
+            # self.isTmpBasicDataBak = False
+            if self.tmpView:
+                try:
+                    self.tmpView.deleteLater()
+                except RuntimeError:
+                    pass
+            if not os.path.exists('maps/'+self.vmap.map['name']+'/basicInfo.json'):
+                shutil.copy('resource/basicInfo.json', 'maps/'+self.vmap.map['name']+'/basicInfo.json')
+            self.tmpView = basicEditW('maps/'+self.vmap.map['name']+'/basicInfo.json')
+            self.tmpView.setWindowModality(Qt.ApplicationModal)
+            self.tmpView.setWindowTitle('基本参数')
+            self.tmpView.show()
+
+        elif key == 'delete':
+            tem = self.tmpView.findChild(QListWidget)
+            data = tem.currentIndex().row()
+            # QModelIndex.row()
+            print(data)
+            if data < 0:
+                return
+            del self.basicData_[tem.item(data).text()]
+            tem.takeItem(data)
+            self.basicDataCpu('save')
+        elif key == 'add':
+            if self.tmpBasicKey != None:
+                with open('resource/tmp/basicInfo.json', 'r') as f:
+                    self.basicData_[self.tmpBasicKey] = json.load(f)
+            title = self.tmpView.findChild(QLineEdit).text()
+            if title in self.basicData_ or title == '':
+                return
+            self.tmpBasicKey = title
+            self.basicData_[title] = {}
+            with open('resource/tmp/basicInfo.json', 'w') as f:
+                json.dump(self.basicData_[title], f)
+            self.tmpView.deleteLater()
+            self.tmpView = basicEditW('resource/tmp/basicInfo.json')
+            self.tmpView.setWindowModality(Qt.ApplicationModal)
+            self.tmpView.setWindowTitle('添加备用配置')
+            self.tmpView.show()
+
+        elif key == 'double':
+            if self.tmpBasicKey != None:
+                with open('resource/tmp/basicInfo.json', 'r') as f:
+                    self.basicData_[self.tmpBasicKey] = json.load(f)
+            if data == -1:
+                return
+            text = self.tmpView.findChild(QListWidget).item(data).text()
+            self.tmpBasicKey = text
+            with open('resource/tmp/basicInfo.json', 'w') as f:
+                json.dump(self.basicData_[text], f)
+            self.tmpView.deleteLater()
+            # with open('resource/tmp/basicInfo.json', 'w') as f:
+            #     json.dump(self.basicData_[text], f)
+            self.tmpView = basicEditW('resource/tmp/basicInfo.json')
+            self.tmpView.setWindowModality(Qt.ApplicationModal)
+            self.tmpView.setWindowTitle('备用参数')
+
+        elif key == 'save':
+            if self.tmpBasicKey != None:
+                with open('resource/tmp/basicInfo.json', 'r') as f:
+                    self.basicData_[self.tmpBasicKey] = json.load(f)
+            # for i in list(self.basicData_.keys()):
+            #     for j in list(self.basicData_[i].keys()):
+            #         for k in list(self.basicData_[i][j].keys()):
+            #             if self.basicData_[i][j][k] == '':
+            #                 del self.basicData_[i][j][k]
+            #                 print(333)
+            #         if self.basicData_[i][j] == {}:
+            #             del self.basicData_[i][j]
+            #             print(2222)
+                # if self.basicData_[i] == {}:
+                #     del self.basicData_[i]
+                #     print('fsd111')
+
+            with open('maps/'+self.vmap.map['name']+'/basicInfo_.json', 'w') as f:
+                json.dump(self.basicData_, f)
 
     def ruleCpu(self, key, data=None):
         print(key, data)
@@ -1699,6 +1817,22 @@ class EditWin(QMainWindow):
                 else:
                     coms[4].setCurrentText(cf['eventdata']+'  '+self.JC[cf['eventdata']]['dsc'])
 
+    def sourceCpu(self, key):
+        if key == 'instruction':
+            if self.tmpView:
+                try:
+                    self.tmpView.deleteLater()
+                except RuntimeError:
+                    pass
+            # self.tmpView = QScro
+            pass
+        elif key == 'sounds':
+            file = QFileDialog.getExistingDirectory(self, '选择音效所在文件夹')
+            resource.saveMap(self.vmap.map['name'], soundPath=file)
+        elif key == 'images':
+            file = QFileDialog.getExistingDirectory(self, '选择图片所在文件夹')
+            resource.saveMap(self.vmap.map['name'], imagePath=file)
+
     def targetChoosed(self, data=None):
         try:
             if self.tmpView.isHidden():
@@ -1874,7 +2008,7 @@ class newWin(QWidget):
 class SkimWin(QWidget):
     def initUI(self, winSize=(600, 400), brother=None, isModify=False):
         self.isModify = isModify
-        self.mapName = resource.maps[0]['name']
+        self.mapName = 'default'
         self.setWindowTitle('浏览地图(双击选择)')
         self.setFixedSize(winSize[0], winSize[1])
         self.brother = brother
@@ -1882,7 +2016,7 @@ class SkimWin(QWidget):
         frame1 = QFrame()
         frame1.setFixedWidth(winSize[0]//2)
         layout1 = QBoxLayout(QBoxLayout.TopToBottom)
-        for i in resource.maps:
+        for i in resource.getAllMaps():
             tem_label =  QPushButton(i['name'])
             tem_label.setStyleSheet('border:none')
             tem_label.setFont(QFont('宋体', 20))
@@ -1894,12 +2028,12 @@ class SkimWin(QWidget):
         area2 = QScrollArea(self)
         self.area = area2
         frame2 = miniVMap()
-        frame2.initUI(resource.maps[0]['name'], area2)
+        frame2.initUI('default', area2)
         # frame2.setFixedSize(frame2.width(),frame2.height())
         area2.setWidget(frame2)
         # area2.setFixedSize(winSize[0]//4, winSize[1]//4)
 
-        frame3 = QLabel(resource.maps[0]['dsc'])
+        frame3 = QLabel(resource.findMap('default')['dsc'])
         frame3.setFixedHeight(winSize[1]//2)
         self.dec_label = frame3
 
