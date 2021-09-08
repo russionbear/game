@@ -8,26 +8,24 @@ from PyQt5 import QtCore
 # from resource_load import resource
 from resource import resource
 
+Qapp = QApplication(sys.argv)
+
 '''
 坐标，地图：左边y轴 
 size，宽高：左边宽度
 '''
 
-class DW(QFrame):
-    def __int__(self):
-        super(DW, self).__int__()
-
-    def initUI(self, newkey={}, mapId=None):
-        key = {'usage': 'dw', 'name': 'footmen', 'flag': 'red', 'action':'right', \
-               'oil':int(resource.basicData['gf'][newkey['name']]['oil']), \
-               'bullect':int(resource.basicData['gf'][newkey['name']]['oil']), \
-               'blood':10, 'moved':False, 'occupied':0, 'loadings':[], 'isDiving':False, 'isStealth':False, 'supplies': {}}
+class DW(QWidget):
+    def __init__(self, parent, newkey={}):
+        super(DW, self).__init__(parent)
+        key = {'usage': 'dw', 'name': 'footmen', 'flag': 'red', 'action': 'right', \
+               'oil': int(resource.basicData['gf'][newkey['name']]['oil']), \
+               'bullect': int(resource.basicData['gf'][newkey['name']]['oil']), \
+               'blood': 10, 'moved': False, 'occupied': 0, 'loadings': [], 'isDiving': False, 'isStealth': False,
+               'supplies': {}}
         key.update(newkey)
-        # print(key)
-        if isinstance(mapId, list):
-            self.mapId = tuple(mapId)
-        else:
-            self.mapId = mapId
+        self.track = resource.find(key)
+        self.mapId = key['mapId']
         self.bodySize = (100, 100)
         self.resize(self.bodySize[0], self.bodySize[1])
         self.occupied = key['occupied']
@@ -40,15 +38,15 @@ class DW(QFrame):
         self.bullect = key['bullect']
         self.moved = key['moved']
         self.supplies = key['supplies']
-        # self.direction = key['direction']
         del key['blood'], key['oil'], key['bullect']
         self.bloodFont = QFont('宋体', self.bloodSize)
         self.statusSize = 40, 40
         self.statusList = [None for i in range(7)]
         self.statusPoint = 0
+        self.initUI()
 
+    def initUI(self):
         self.body = QLabel(self)
-        self.track = resource.find(key)
         pm = self.track['pixmap'].scaled(self.bodySize[0], self.bodySize[1])
         self.body.setPixmap(pm)
 
@@ -76,9 +74,9 @@ class DW(QFrame):
         self.setLayout(layout)
         self.status.clear()
 
-        self.setFrameShape(QFrame.Box)
-        self.setFrameShadow(QFrame.Raised)
-        self.setLineWidth(0)
+        # self.setFrameShape(QFrame.Box)
+        # self.setFrameShadow(QFrame.Raised)
+        # self.setLineWidth(0)
 
         # self.doBlood(5)
 
@@ -134,28 +132,6 @@ class DW(QFrame):
         else:
             return False
 
-    def contains(self, p:QPoint):
-        if self.x() < p.x() and self.y() < p.y() and \
-                self.x()+self.width() > p.x() and self.y() + self.height()> p.y():
-            return True
-        else:
-            return False
-
-    def choose(self, bool):
-        if bool:
-            self.setLineWidth(2)
-        else:
-            self.setLineWidth(0)
-
-    def change(self, track, data={}):
-        self.body.setPixmap(track['pixmap'].scaled(self.bodySize[0], self.bodySize[1]))
-        if 'blood' in data:
-            self.blood.setText(str(data['blood']))
-            self.bloodValue = str(data['blood'])
-        if 'oil' in data:
-            self.oil = data['oil']
-        if 'bullect' in data:
-            self.bullect = data['bullect']
 
     def myUpdate(self):
         '''ok, oil, bullet, occupy, loading, supplies, diving, stealth'''
@@ -184,7 +160,7 @@ class DW(QFrame):
         keys1 = ['blood', 'oil', 'bullect', 'occupied', 'isStealth', 'isDiving', 'loadings', 'supplies', 'moved', 'mapId', 'name']
         keys2 = [self.bloodValue, self.oil, self.bullect, self.occupied, self.isStealth, \
                  self.isDiving, self.loadings, self.supplies, self.moved, self.mapId, self.track['name']]
-        track = {'isAlive':True, 'action':self.track['action'], 'flag':self.track['flag']}
+        track = {'isAlive':True, 'action':self.track['action'], 'flag':self.track['flag'], 'base64':self.track['base64']}
         for i, j in enumerate(keys1):
             if j in keys or not keys:
                 track[j] = keys2[i]
@@ -203,46 +179,31 @@ class DW(QFrame):
         self.moved = self.moved if 'moved' not in track else track['moved']
         # self.mapId = self.mapId if not track['mapId'] else track['mapId']
 
+
 class Geo(QLabel):
-    def __init__(self, parent, newKey={}, mapId=None, brother=None):
+    def __init__(self, parent, newKey={}):
         super(Geo, self).__init__(parent)
         key = {'usage':'geo', 'name':'plain'}
         key.update(newKey)
-        if isinstance(mapId, list):
-            self.mapId = tuple(mapId)
-        else:
-            self.mapId = mapId
+        # print(key, newKey)
+        self.track = key
+        self.mapId = key['mapId']
+        self.initUI()
+
+    def initUI(self):
         self.resize(100, 100)
         self.size_ = self.width(), self.height()
-        if 'pixmap' not in key:
-            key['pixmap'] = resource.find(key)['pixmap']
-        self.track = key
-        self.setPixmap(key['pixmap'].scaled(self.width(), self.height()))
+        pm = resource.find(self.track)['pixmap']
+        self.setPixmap(pm.scaled(self.width(), self.height()))
         self.setScaledContents(True)
-        self.setFrameShape(QFrame.Box)
-        self.setFrameShadow(QFrame.Raised)
-        self.setLineWidth(0)
 
-        self.brother = brother
-
-        self.setFrameShape(QFrame.Box)
-        self.setFrameShadow(QFrame.Raised)
-        self.setLineWidth(0)
-
-    def change(self, string=None, track=None):
-        if string :
-            track = self.track.copy()
-            track['name'] = string
-            tem = resource.find(track)
-        else:
-            tem = track
-        if tem:
-            self.setPixmap(tem['pixmap'].scaled(self.width(), self.height()))
-            self.track = track
-
-    def scale_(self, n):
-        self.size_ = self.size_[0] *n, self.size_[1]* n
-        self.resize(round(self.size_[0]), round(self.size_[1]))
+    def change(self, track):
+        self.track.update(track)
+        self.track = resource.find(self.track)
+        try:
+            self.setPixmap(self.track['pixmap'].scaled(self.width(), self.height()))
+        except TypeError:
+            print(self.track, self.mapId)
 
     def scale(self, data):
         self.size_ = data['body']
@@ -256,27 +217,6 @@ class Geo(QLabel):
             return True
         else:
             return False
-
-    def choose(self, bool):
-        if bool:
-            self.setLineWidth(2)
-        else:
-            self.setLineWidth(0)
-
-    def mousePressEvent(self, ev: QtGui.QMouseEvent) -> None:
-        if self.brother:
-            self.brother.choose(self.mapId)
-            self.choose(True)
-        ev.ignore()
-
-    def contains(self, p:QPoint):
-        if self.x() < p.x() and self.y() < p.y() and \
-                self.x()+self.width() > p.x() and self.y() + self.height()> p.y():
-            return True
-        else:
-            return False
-
-QApp = QApplication(sys.argv)
 
 class VMap(QWidget):
     def initUI(self, name='test', parent=None, block=(100, 100), winSize=(800, 800), brother=None):
@@ -295,10 +235,10 @@ class VMap(QWidget):
         for i in range(len(self.map['map'])):
             tem_data = []
             for j in range(len(self.map['map'][i])):
-                track = resource.findByHafuman(str(self.map['map'][i][j]))
-                # print(track, str(self.map['map'][i][j]))
+                track = resource.findByHafuman(self.map['map'][i][j])
+                print(track, str(self.map['map'][i][j]))
                 if not track:
-                    print('map error')
+                    print('map error', 'mini')
                     return
                 tem_geo = Geo(self, track, (i, j))
                 tem_geo.move(j*self.mapBlockSize[0], i*self.mapBlockSize[1])
@@ -326,17 +266,8 @@ class VMap(QWidget):
 
         self.pointer_dw = [[None for i in range(self.mapSize[0])] for j in range(self.mapSize[1])]
         for i in self.map['dw']:
-            track = resource.findByHafuman(i['hafuman'])
-            # for k in ['blood', 'oil', 'bullect', 'move']:
-            #     if k in i:
-            #         track[k] = i[k]
-
-            # track['blood'] = i['blood']
-            # track['oil'] = i['oil']
-            # track['bullect'] = i['bullect']
-            # track['moved'] = i['moved']
+            track = resource.findByHafuman(i['base64'])
             axis = i['axis']
-            # del i['axis']
             track.update(i)
             dw = DW(self)
             # print(track, axis)
@@ -663,7 +594,9 @@ class VMap(QWidget):
             ##dw...
             self.circled = end
             if self.brother:
-                if self.brother.choosed:
+                # if self.brother.choosed:
+                tem = self.brother.getChoosedValue()
+                if tem:
                     self.modify(end, self.brother.getChoosedValue())
 
             # print(len(end))
@@ -698,19 +631,21 @@ class VMap(QWidget):
             for j in range(self.mapSize[0]):
                 tem = geos.__next__()
                 # com.append(int(resource.findHafuman(tem.track['base64'])))
-                com.append(tem.track['hafuman'])
+                com.append(tem.track['base64'])
             map['map'].append(com)
 
         dws = []
         for i in self.findChildren(DW):
-            com = {}
-            com['hafuman'] = resource.findHafuman(i.track['base64'])
-            com['axis'] = i.mapId
-            com['oil'] = i.oil
-            com['bullect'] = i.bullect
-            com['blood'] = i.bloodValue
-            com['occupied'] = i.occupied
-            dws.append(com)
+            # com = {}
+            # com['hafuman'] = resource.findHafuman(i.track['base64'])
+            # com['hafuman'] = i.track['base64']
+            # com['axis'] = i.mapId
+            # com['oil'] = i.oil
+            # com['bullect'] = i.bullect
+            # com['blood'] = i.bloodValue
+            # com['occupied'] = i.occupied
+            # dws.append(com)
+            dws.append(i.makeTrack())
         map['dw'] = dws
         self.map.update(map)
         # print(self.map)
@@ -725,29 +660,32 @@ class miniVMap(QWidget):
             self.map = resource.findMap(name)
         if parent:
             self.setParent(parent)
-        print(self.map)
+        # print(map, self.map)
         self.mapSize = len(self.map['map'][0]), len(self.map['map'])
         self.mapScalePoint = 1
         self.mapBlockSize = resource.mapScaleList[self.mapScalePoint]['body']
         self.setFixedSize(self.mapSize[0]*self.mapBlockSize[0], self.mapSize[1]*self.mapBlockSize[1])
         for i in range(len(self.map['map'])):
             for j in range(len(self.map['map'][i])):
-                track = resource.findByHafuman(str(self.map['map'][i][j]))
+                track = resource.findByHafuman(self.map['map'][i][j])
+                # print(track, self.map['map'][i][j])
                 if not track:
-                    print('map error')
+                    print('map error356')
                     return
-                tem_geo = Geo(self, track, (i, j))
+                track['mapId'] = i, j
+                tem_geo = Geo(self, track)
                 tem_geo.move(j * self.mapBlockSize[0], i * self.mapBlockSize[1])
                 tem_geo.scale(resource.mapScaleList[self.mapScalePoint])
 
         for i in self.map['dw']:
             track = resource.findByHafuman(i['hafuman'])
             # print('hh', track, i)
-            axis = i['axis']
+            # axis = i['axis']
             # del i['axis'] #######hhhhhaaaaaaa
             track.update(i)
-            dw = DW(self)
-            dw.initUI(track, axis)
+            axis = track['mapId']
+            dw = DW(self, track)
+            # dw.initUI(track)
             dw.move(axis[1] * self.mapBlockSize[1], axis[0] * self.mapBlockSize[0])
             dw.scale(resource.mapScaleList[self.mapScalePoint])
 
@@ -766,4 +704,4 @@ if __name__ == '__main__':
     # window.modify([],None)
     # window.collectMap()
     window.show()
-    sys.exit(QApp.exec_())
+    sys.exit(Qapp.exec_())
