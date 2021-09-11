@@ -7,7 +7,7 @@ import json, os, shutil
 
 from PyQt5.Qt import *
 from PyQt5 import QtCore, QtGui
-from map_load import VMap, Geo, DW, miniVMap
+from map_load import Geo, DW, miniVMap
 # from tmap_load import TMap
 # from resource_load import resource
 from resource import resource
@@ -267,7 +267,7 @@ class EditTool(QWidget):
             self.choosedSupplies = end
         view.deleteLater()
 
-class EditMap(VMap):
+class EditMap(QWidget):
     def __init__(self, name='default', parent=None, block=(100, 100), winSize=(800, 800), brother=None):
         super(EditMap, self).__init__(parent)
         self.brother = brother
@@ -795,6 +795,33 @@ class EditMap(VMap):
                 j.flush()
                 j.myUpdate()
 
+    def collectMap(self):
+        map = {}
+        map['map'] = []
+        geos = iter(self.findChildren(Geo))
+        for i in range(self.mapSize[1]):
+            com = []
+            for j in range(self.mapSize[0]):
+                tem = geos.__next__()
+                com.append(tem.track['base64'])
+            map['map'].append(com)
+
+        dws = []
+        for i in self.findChildren(DW):
+            # com = {}
+            # com['hafuman'] = resource.findHafuman(i.track['base64'])
+            # com['hafuman'] = i.track['base64']
+            # com['axis'] = i.mapId
+            # com['oil'] = i.oil
+            # com['bullect'] = i.bullect
+            # com['blood'] = i.bloodValue
+            # com['occupied'] = i.occupied
+            # dws.append(com)
+            dws.append(i.makeTrack())
+        map['dw'] = dws
+        self.map.update(map)
+        return self.map.copy()
+
 class EditWin(QMainWindow):
     def __init__(self):
         super(EditWin, self).__init__()
@@ -818,11 +845,6 @@ class EditWin(QMainWindow):
         mapMenu.addAction('修改').triggered.connect(self.modifyMap)
         mapMenu.addAction('保存').triggered.connect(self.saveMap)
 
-        mapMenu = self.menuBar().addMenu('游戏参数')
-        mapMenu.addAction('基本参数').triggered.connect(functools.partial(self.basicDataCpu, 'basic'))
-        mapMenu.addAction('备用参数').triggered.connect(functools.partial(self.basicDataCpu, 'skim'))
-        mapMenu.addAction('保存').triggered.connect(functools.partial(self.basicDataCpu, 'save'))
-
         mapMenu = self.menuBar().addMenu('素材')
         mapMenu.addAction('图片').triggered.connect(functools.partial(self.sourceCpu, 'images'))
         mapMenu.addAction('切换图片').triggered.connect(functools.partial(self.sourceCpu, 'swap'))
@@ -831,6 +853,7 @@ class EditWin(QMainWindow):
 
         mapMenu = self.menuBar().addMenu('规则')
         mapMenu.addAction('故事背景').triggered.connect(self.storyCpu)
+        mapMenu.addAction('指挥官限制').triggered.connect(functools.partial(self.heroCpu, 'open'))
         mapMenu.addSeparator()
         mapMenu.addAction('制作游戏参数').triggered.connect(self.basicDataCpu)
         mapMenu.addAction('制作游戏加成').triggered.connect(self.backupCpu)
@@ -838,25 +861,20 @@ class EditWin(QMainWindow):
         mapMenu.addAction('制作触发器').triggered.connect(self.toggleCpu)
         mapMenu.addAction('制作事件').triggered.connect(self.toggleEventCpu)
         mapMenu.addSeparator()
-        # mapMenu.addAction('组装').triggered.connect(functools.partial(self.ruleCpu, 'plan'))
-
-        self.pages = {}
-        self.statusBar().showMessage('lalal')
+        mapMenu.addAction('合并数据').triggered.connect(self.mergeCpu)
+        mapMenu.addAction('最终整合').triggered.connect(self.ruleCpu)
 
         self.center = QWidget(self)
         self.tool = EditTool()
         self.tool.initUi(mainWin=self)
         self.vmap = EditMap(mapName, self.center, brother=self.tool)
-        # self.vmap.initUI()
         layout = QBoxLayout(QBoxLayout.LeftToRight)
         layout.addWidget(self.tool)
         layout.addWidget(self.vmap)
         self.center.setLayout(layout)
-        # self.vmap.move(self.tool.width(), 0)
         self.setCentralWidget(self.center)
 
         self.modeLSView = self.modeSkim = self.modeModify = None
-        # self.showLSView()
         self.tmpView = None
 
     def skimMap(self):
@@ -930,7 +948,7 @@ class EditWin(QMainWindow):
             self.modeModify.show()
 
     def saveMap(self):
-        tem_v = self.findChild(VMap)
+        tem_v = self.findChild(EditMap)
         tem_map = tem_v.collectMap()
         resource.saveMap(tem_map['name'], map=tem_map)
 
@@ -1386,6 +1404,7 @@ class EditWin(QMainWindow):
                     self.tmpView.deleteLater()
                 except RuntimeError:
                     pass
+            resource.initMap(self.vmap.map['name'])
             self.swapMap(self.vmap.map['name'])
         elif key == 'sounds':
             file = QFileDialog.getExistingDirectory(self, '选择音效所在文件夹')
@@ -1405,6 +1424,108 @@ class EditWin(QMainWindow):
         self.setWindowModality(Qt.ApplicationModal)
         self.show()
 
+    #--> 没选则此势力没有指挥官 <--#
+    def heroCpu(self, key):
+        path = 'maps/' + self.vmap.map['name'] + '/heros.json'
+        if key == 'open':
+            if self.tmpView:
+                try:
+                    self.tmpView.deleteLater()
+                except RuntimeError:
+                    pass
+            self.tmpView = QWidget()
+            self.tmpView.setWindowModality(Qt.ApplicationModal)
+            if not os.path.exists(path):
+                tem_data = {}
+                with open(path, 'w') as f:
+                    json.dump({}, f)
+            else:
+                with open(path, 'r') as f:
+                    tem_data = json.load(f)
+            layout = QVBoxLayout()
+            heros = []
+            for i in resource.findAll({'usage':'hero', 'action':'head'}):
+                heros.append(i['name'])
+            for i in ['red', 'blue', 'green', 'yellow']:
+                layout1 = QHBoxLayout()
+                layout1.addWidget(QLabel(i, self.tmpView))
+                for j in heros:
+                    tem = QCheckBox(j, self.tmpView)
+                    tem.data = i
+                    if i in tem_data:
+                        if j in tem_data[i]:
+                            tem.setChecked(True)
+                    layout1.addWidget(tem)
+                layout.addLayout(layout1)
+            tem = QPushButton('save', self.tmpView)
+            tem.clicked.connect(functools.partial(self.heroCpu, 'save'))
+            layout.addWidget(tem)
+            self.tmpView.setLayout(layout)
+            self.tmpView.show()
+
+        elif key == 'save':
+            end = {'red':[], 'blue':[], 'green':[], 'yellow':[]}
+            for i in self.tmpView.findChildren(QCheckBox):
+                if i.isChecked():
+                    end[i.data].append(i.text())
+            for i, j in end.items():
+                if not j:
+                    del end[i]
+            with open(path, 'w') as f:
+                json.dump(end, f)
+            self.tmpView.deleteLater()
+
+    def ruleCpu(self):
+        if self.tmpView:
+            try:
+                self.tmpView.deleteLater()
+            except RuntimeError:
+                pass
+        self.tmpView = ruleEditWin(self.vmap.map['name'])
+        self.tmpView.setWindowModality(Qt.ApplicationModal)
+        self.tmpView.show()
+
+    ##---------------------懒啊-------------------------#
+    def mergeCpu(self):
+        ## lines, basicData
+        with open('maps/'+self.vmap.map['name']+'/lines.json', 'r') as f:
+            tem = json.load(f)
+        with open('resource/lines.json', 'r') as f:
+            tem_ = json.load(f)
+
+        if 'default' not in tem:
+            tem['default'] = tem_['default']
+        else:
+            for i, j in tem_['default'].items():
+                if i not in tem['default']:
+                    tem[i] = j
+
+        with open('maps/'+self.vmap.map['name']+'/lines.json', 'w') as f:
+            json.dump(tem, f)
+
+        with open('maps/'+self.vmap.map['name']+'/basicInfo.json', 'r') as f:
+            tem = json.load(f)
+        with open('resource/basicInfo.json', 'r') as f:
+            tem_ = json.load(f)
+        if 'default' not in tem:
+            tem['default'] = tem_['default']
+        else:
+            for i1, i in tem_['default'].items():
+                if i1 not in tem['default']:
+                    tem[i] = i
+                else:
+                    for j1, j in tem_['default'][i1].items():
+                        if j1 not in tem['default'][i1]:
+                            tem['default'][j1] = j
+                        else:
+                            for k1, k in tem_['default'][i1][j1].items():
+                                if k1 not in tem_['default'][i1][j1]:
+                                    tem_['default'][i1][j1][k1] = k
+
+        with open('maps/'+self.vmap.map['name']+'/basicInfo.json', 'w') as f:
+            json.dump(tem, f)
+
+
     def keyReleaseEvent(self, a0: QtGui.QKeyEvent) -> None:
         if a0.key() in [Qt.Key_Escape, Qt.Key_Return] and self.vmapMode != None:
             self.vmap.keyReleaseEvent(a0)
@@ -1417,19 +1538,23 @@ class EditWin(QMainWindow):
                 self.vmap.enterChooseMode(event.type_, event.data)
                 self.tmpView.hide()
                 self.vmapMode = event.type_
+                self.findChild(QMenuBar).setEnabled(False)
             elif event.type_ == 'toShow':
                 self.vmap.enterChooseMode(event.type_, event.data)
                 self.tmpView.hide()
                 self.vmapMode = event.type_
+                self.findChild(QMenuBar).setEnabled(False)
             elif event.type_ == 'toChoosed':
                 print(event.data, 'server')
                 if event.data:
                     self.tmpView.choosed(event.data)
                 self.tmpView.show()
                 self.vmapMode = None
+                self.findChild(QMenuBar).setEnabled(True)
             elif event.type_ == 'toShowed':
                 self.tmpView.show()
                 self.vmapMode = None
+                self.findChild(QMenuBar).setEnabled(True)
         return super(EditWin, self).event(event)
 
 
@@ -1882,35 +2007,44 @@ class bscEditWin(QWidget):
 
     ##模板
     def delete(self):
+        self.save()
+        #----------------------------------
         tem_ = self.findChild(QListWidget)
         tem = tem_.currentItem()
         if tem == None:
             return
         del self.data[tem.text()]
         tem_.takeItem(tem_.currentIndex().row())
+        #----------------------------------
     ##模板
     def add(self):
+        #----------------------------------
         tem = self.findChild(QListWidget)
         text = self.findChild(QLineEdit).text()
         if text in self.data or text == '':
             return
         tem.addItem(QListWidgetItem(text))
+        #----------------------------------
 
         self.data[text] = {}        ##模板
         with open(self.tmpPath, 'w') as f:
             json.dump({}, f)
     ##模板
     def rename(self):
+        self.save()
+        #----------------------------------
         tem_ = self.findChild(QListWidget)
         tem = tem_.currentItem()
         if tem == None:
             return
         text = self.findChild(QLineEdit).text()
+
         if text in self.data or text == '':
             return
-        self.data[text] = self.data[tem_.text()].copy()
-        del self.data[tem_.text()]
+        self.data[text] = self.data[tem.text()].copy()
+        del self.data[tem.text()]
         tem.setText(text)
+        #----------------------------------
         self.save()                 ##模板
 
     def save(self):
@@ -1924,7 +2058,6 @@ class bscEditWin(QWidget):
             self.nowMap = None
         with open(self.path, 'w') as f:
             json.dump(self.data, f)
-
 
 class backupEditWin(QWidget):
     def __init__(self, path, MAX=12):
@@ -2033,7 +2166,6 @@ class storyEditWin(QWidget):
         else:
             with open(path, 'r') as f:
                 self.data = json.load(f)
-        # self.MAX = MAX
         self.nowName = None
         self.initUI()
 
@@ -2070,6 +2202,7 @@ class storyEditWin(QWidget):
         layout.addLayout(layout1)
         layout.addLayout(layout2)
         self.setLayout(layout)
+        self.show()
 
     def clicked(self, data:None):
         self.save()
@@ -2126,6 +2259,7 @@ class storyEditWin(QWidget):
         self.data[self.nowName]['command'] = com[1].toPlainText()
         with open(self.path, 'w') as f:
             json.dump(self.data, f)
+
 
 class toggleEditWin(QWidget):
     def __init__(self, path, brother=None):
@@ -2456,7 +2590,7 @@ class toggleEventEditWin(QWidget):
         self.cfType = {'dw': ['alive', 'blood', 'oil', 'bullect', 'flag'], \
                        'dws': ['alive', 'blood', 'oil', 'bullect', 'flag'], \
                        'build': ['flag', 'change'], 'builds': ['flag', 'change'],\
-                       'money': [], \
+                       'money': [], 'backup':[], \
                        'toggle':['start', 'stop', 'kill'], 'energy':['become'], \
                        'story': [], 'lines':[], 'basicData':[], 'tip': ['normal', 'screen'], \
                        'target': ['victory', 'failure', 'control']}
@@ -2576,7 +2710,7 @@ class toggleEventEditWin(QWidget):
                 i.show()
             self.component2[2].show()
             self.component2[3].show()
-        elif data in ['story', 'lines']:
+        elif data in ['story', 'lines', 'basicData', 'backup']:
             for i in self.component2:
                 i.hide()
             for i in self.component_flag:
@@ -2777,6 +2911,26 @@ class toggleEventEditWin(QWidget):
             layout.addWidget(tem)
             self.tmpView.setLayout(layout)
             self.tmpView.show()
+        elif tem_text == 'backup':
+            layout = QVBoxLayout()
+            path = 'maps/' + self.brother.vmap.map['name'] + '/backup.json'
+            if os.path.exists(path):
+                with open(path, 'r') as f:
+                    end = json.load(f)
+            else:
+                end = {}
+            for i, j in end.items():
+                tem = QRadioButton(self.tmpView)
+                tem.setText(i)
+                if 'data' in self.data[name]:
+                    if self.data[name]['data'] == i:
+                        tem.setChecked(True)
+                layout.addWidget(tem)
+            tem = QPushButton('save', self.tmpView)
+            tem.clicked.connect(self.dwChoosed)
+            layout.addWidget(tem)
+            self.tmpView.setLayout(layout)
+            self.tmpView.show()
 
     def dwChoosed(self):
         tem_text = self.findChild(QComboBox).currentText()
@@ -2787,7 +2941,7 @@ class toggleEventEditWin(QWidget):
                 end[i.data] = i.value()
             self.data[name]['value'] = end
             self.tmpView.deleteLater()
-        elif tem_text in ['story', 'lines', 'basicData', 'build', 'builds']:
+        elif tem_text in ['story', 'lines', 'basicData', 'build', 'builds', 'backup']:
             for i in self.tmpView.findChildren(QRadioButton):
                 if i.isChecked():
                     self.data[name]['data'] = i.text()
@@ -2950,6 +3104,119 @@ class toggleChooseEvent(QEvent):
         super(toggleChooseEvent, self).__init__(toggleChooseEvent.idType)
         self.type_ = type_
         self.data = data
+
+
+class ruleEditWin(QWidget):
+    def __init__(self, mapName):
+        super(ruleEditWin, self).__init__()
+        self.basic_path = ['stories', 'lines', 'basicInfo', 'backup', 'toggles', 'toggleEvents', 'rule']
+        self.data = {}
+        for i in self.basic_path:
+            path = 'maps/'+mapName+'/'+i+'.json'
+            if not os.path.exists(path):
+                with open(path, 'w') as f:
+                    json.dump({}, f)
+                    self.data[i] = {}
+            else:
+                with open(path, 'r') as f:
+                    self.data[i] = json.load(f)
+        self.ruleData = self.data['rule'].copy()
+        del self.data['rule']
+        self.path = 'maps/'+mapName+'/rule.json'
+        self.initUI()
+
+    def initUI(self):
+        max_cols = 12
+        layout = QVBoxLayout()
+        layout1 = QHBoxLayout()
+        layout1.addWidget(QLabel('role', self))
+        for i in self.basic_path[:-3]:
+            layout1.addWidget(QLabel(i, self))
+        layout.addLayout(layout1)
+        for i in ['red', 'blue', 'green', 'yellow']:
+            layout1 = QHBoxLayout()
+            layout1.addWidget(QLabel(i, self))
+            for j in self.basic_path[:-3]:
+                tem = QComboBox(self)
+                tem.addItems(self.data[j].keys())
+                tem.data = j
+                tem.key = i
+                if i in self.ruleData:
+                    if j in self.ruleData[i]:
+                        tem.setCurrentText(self.ruleData[i][j])
+                layout1.addWidget(tem)
+            tem = QLineEdit(self)
+            tem.setPlaceholderText('初始资金')
+            tem.key = i
+            tem.data = 'beginMoney'
+            if i in self.ruleData:
+                if 'beginMoney' in self.ruleData[i]:
+                    tem.setText(self.ruleData[i]['beginMoney'])
+            layout1.addWidget(tem)
+            tem = QLineEdit(self)
+            tem.setPlaceholderText('初始能量(%)')
+            tem.key = i
+            tem.data = 'beginEnergy'
+            if i in self.ruleData:
+                if 'beginEnergy' in self.ruleData[i]:
+                    tem.setText(self.ruleData[i]['beginEnergy'])
+            layout1.addWidget(tem)
+            layout1.addWidget(QLabel('敌人', self))
+            for j in ['red', 'blue', 'green', 'yellow']:
+                tem = QCheckBox(j, self)
+                tem.data = i
+                if i in self.ruleData:
+                    if 'enemy' in self.ruleData[i]:
+                        if j in self.ruleData[i]['enemy']:
+                            tem.setChecked(True)
+                layout1.addWidget(tem)
+
+            layout.addLayout(layout1)
+        layout.addWidget(QLabel('启动触发器', self))
+        if 'itIsOn' in self.ruleData:
+            toggles_ = self.ruleData['itIsOn']
+        else:
+            self.ruleData['itIsOn'] = []
+            toggles_ = []
+        toggles = list(self.data['toggles'].keys())
+        tLen = len(toggles)
+        i = 0
+        while 1:
+            layout1 = QHBoxLayout()
+            for j in toggles[i:i+max_cols if i+max_cols < tLen else tLen]:
+                tem = QCheckBox(j, self)
+                if j in toggles_:
+                    tem.setChecked(True)
+                layout1.addWidget(tem)
+            layout.addLayout(layout1)
+            i += max_cols
+            if i >= tLen:
+                break
+        tem = QPushButton('save', self)
+        tem.clicked.connect(self.save)
+        layout.addWidget(tem)
+        self.setLayout(layout)
+        self.show()
+
+    def save(self):
+        end = {'red':{}, 'blue':{}, 'green':{} , 'yellow':{}, 'itIson':[]}
+        for i in self.findChildren(QComboBox):
+            end[i.key][i.data] = i.currentText()
+        for i in self.findChildren(QLineEdit):
+            end[i.key][i.data] = i.text()
+        tems = self.findChildren(QCheckBox)
+        for i in tems[:16]:
+            if i.isChecked():
+                if 'enemy' not in end[i.data]:
+                    end[i.data]['enemy'] = []
+                end[i.data]['enemy'].append(i.text())
+        for i in tems[16:]:
+            if i.isChecked():
+                end['itIson'].append(i.text())
+        self.ruleData = end
+        with open(self.path, 'w') as f:
+            json.dump(self.ruleData, f)
+
 
 if __name__ == '__main__':
     window = EditWin()

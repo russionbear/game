@@ -7,6 +7,6 @@
 
 
 
-# if __name__ == "__main__":
-    # with open('E:/TMP/123/123.txt', 'w') as f:
-    #     pass
+if __name__ == "__main__":
+    abc = [i for i in range(10)]
+    print(abc[:3], abc[2:3], abc[:-2], abc[2:-2])

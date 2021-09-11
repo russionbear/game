@@ -61,7 +61,9 @@ class basicEditW(QMainWindow):
         self.setFixedSize(1280, 800)
         geos = self.getInitData()
         dws = self.getInitData('dw')
-        hero = ['warhton', 'google']
+        hero = []
+        for i in resource.findAll({'usage':'hero', 'action':'head'}):
+            hero.append(i['name'])
         attrs = ['move_distance', 'view_distance', 'gf_g', 'gf_f', 'gf_mindistance', 'gf_maxdistance', 'money', 'oil', 'bullect', 'skill_dsc']
         attrs_1 = ['money', 'chineseName', 'classify', 'canoccupy', 'candiving', 'canloading', 'cansupply', 'canstealth', 'canlaymine', 'daycost', 'dsc', 'sound_move', 'sound_fight']
 

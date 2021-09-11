@@ -3,9 +3,7 @@
 # @FileName  :tmap_load.py
 # @Time      :2021/7/22 16:06
 # @Author    :russionbear
-'''
-(i, j)低i行, 第j列
-'''
+
 import time
 
 from PyQt5.Qt import *
@@ -13,35 +11,25 @@ from PyQt5 import QtGui
 from PyQt5 import QtCore
 import functools
 import sys, json, zlib
-from map_load import DW , Geo, VMap, resource
+from map_load import DW , Geo, VMap
+from resource import resource
 from net.netTool import ROOMSERVER, myThread
-# class QApp(QApplication):
-#     def __init__(self):
-#         super(QApp, self).__init__(sys.argv)
-#         self.forbiden = False
-#     def notify(self, a0: QtCore.QObject, a1: QtCore.QEvent) -> bool:
-#         if not self.forbiden or a1.type() not in [QMouseEvent, QKeyEvent]:
-#             return super(QApp, self).notify(a0, a1)
-#
-#     def timerGo(self, m):
-#         self.forbiden = True
-#         self.timer = QTimer()
-#         self.timer.start(m)
-#         self.timer.timeout.connect(self.timerStop)
-#
-#     def timerStop(self):
-#         self.forbiden = False
-#         self.timer.deleteLater()
-#         # self.killTimer(self.timer)
+
+'''
+---------guider--------------
+    showHead, showDWInfo, showTalk, showTitle, showChat, showInput, 
+    fightData, imperialEdict, 
+    mapMove, mapScale, control
+    
+    control:fight, move, loadings, planSupply
+'''
 
 qapp = QApplication(sys.argv)
 # qapp = QApp()
 
 class TMap(VMap):
-    def __init__(self, mapName='test1', users=None, tUser=None, conn=None, parent=None):
+    def __init__(self, mapName='default', users=None, tUser=None, conn=None, parent=None):
         super(TMap, self).__init__(parent)
-        # 命令类型：存活多少单位，存活指定单位，防御某个建筑，存活多少建筑，拖住多少回合，回合内击杀，阻拦多少单位，阻拦某个单位，
-        # 回合内消灭多少单位/资金，占领指挥部，消灭敌方，不消灭敌方某单位
         # self.users = [{'flag': 'red', 'enemy': ['blue'], 'action': 'right', 'command_bg': '会战', 'command': '消灭敌方', \
         #                'outcome': 0, 'money': 99999, 'hero': 'google', 'header_loc': None, 'canBeGua': False, 'bout': 1,
         #                'exp': 2}, \
@@ -2208,17 +2196,671 @@ class ScreenMovingEnd(QEvent):
         super(ScreenMovingEnd, self).__init__(ScreenMovingEnd.idType)
         self.data = kwargs
 
-if __name__ == '__main__':
-    hereusers = [{'flag': 'red', 'enemy': ['blue', 'yellow'], 'action': 'right', 'command_bg': '会战', 'command': '消灭敌方', \
-                   'outcome': 0, 'money': 99999, 'hero': 'google', 'header_loc': None, 'canBeGua': False, 'bout': 1,
-                   'exp': 2}, \
-                  {'flag': 'blue', 'enemy': ['red', 'yellow'], 'action': 'left', 'command_bg': '会战', 'command': '消灭敌方', \
-                   'outcome': 0, 'money': 0, 'hero': 'warhton', 'header_loc': None, 'canBeGua': False, 'bout': 1,
-                   'exp': 2}]
-    window = TMap(users=hereusers, tUser=hereusers[0])
-    window.show()
-    # window.dwTalk(None, 'fsdf123123邓弗里斯快递费就是快乐的风景')
+class TMap_(QWidget):
+    def __init__(self, fuse, mapName='default'):
+        super(TMap_, self).__init__()
+        #usersInfo = {'red':{'hero', 'isMe', 'userName}}
+        ## userInfo, heroName, isMe/action, enemy, dataInfo, dispos,
+        resource.initMap(mapName, True)
+        self.forces = fuse
 
-    # window.initUI()
-    # window.moveToDw()
+        #----
+        for i, j in fuse.items():
+            tem_data = resource.mapRule[i].copy()
+
+            try:
+                money = int(tem_data['beginMoney'])
+            except ValueError:
+                money = 1
+            try:
+                energy = int(tem_data['beginEnergy'])
+            except ValueError:
+                energy = 0
+
+            self.forces[i]['dataInfo'] = {'money': money, \
+                                          'outcome': 0, 'bout': 1, \
+                                          'destory': 0, 'loss': 0, 'armyPrice': 0, \
+                                          'energy': energy}
+            if 'enemy' in tem_data:
+                self.forces[i]['enemy'] = tem_data['enemy'].copy()
+                del tem_data['enemy']
+            else:
+                self.forces[i]['enemy'] = []
+
+            del tem_data['beginMoney'], tem_data['beginEnergy']
+            self.forces[i]['dispos'] = tem_data
+
+        # self.canMove = (False, False)
+        self.mapScalePoint = 5
+
+        self.initUI(mapName)
+        self.hasMove = False
+        # self.hasCircle = False
+        # self.circled = None
+
+    def initUI(self, mapName, winSize=QSize(800, 800)):
+        self.mapBlockSize = resource.mapScaleList[self.mapScalePoint]['body']
+        self.setFixedSize(winSize)
+        self.map = resource.findMap(mapName)
+        if not self.map:
+            print(self.map, 'error', mapName)
+            sys.exit()
+        self.mapSize = len(self.map['map'][0]), len(self.map['map'])
+
+        self.pointer_geo = []
+        self.pointer_dw = [[None for i in range(self.mapSize[0])] for j in range(self.mapSize[1])]
+
+        for i in range(len(self.map['map'])):
+            tem_data = []
+            for j in range(len(self.map['map'][i])):
+                track = resource.findByHafuman(self.map['map'][i][j])
+                if not track:
+                    print('error:map initUI, hafuman')
+                    sys.exit()
+                track['mapId'] = i, j
+                tem_geo = Geo(self, track)
+                tem_geo.move(j*self.mapBlockSize[0], i*self.mapBlockSize[1])
+                tem_data.append(tem_geo)
+            self.pointer_geo.append(tem_data)
+
+        for i in self.map['dw']:
+            track = resource.findByHafuman(i['base64'])
+            axis = i['axis']
+            track.update(i)
+            dw = DW(self)
+            # print(track, axis)
+            dw.initUI(track, axis)
+            dw.move(axis[1]*self.mapBlockSize[1], axis[0]*self.mapBlockSize[0])
+            self.pointer_dw[axis[0]][axis[1]] = dw
+
+
+
+        self.canMove = (True if self.mapBlockSize[0]*self.mapSize[0] > self.width() else False,
+                               True if self.mapBlockSize[1]*self.mapSize[1]>self.height() else False)
+
+        self.mapScale(True)
+
+        self.layers = []
+        self.isRun = True
+
+        self.show()
+
+        # self.canScale = False
+        # self.hasCircle = self.hasMove = False
+        # self.circled = []
+        # self.circle = QFrame(self)
+        # # self.setP
+        # self.circle.setFrameShape(QFrame.Box)
+        # self.circle.setFrameShadow(QFrame.Sunken)
+        # self.circle.setStyleSheet('background-color:#00a7d0;')
+        # op = QGraphicsOpacityEffect()
+        # op.setOpacity(0.4)
+        # self.circle.setGraphicsEffect(op)
+        # self.circle.hide()
+        # self.circle.setLineWidth(0)
+        # self.circleStatus = None
+        #
+        #
+        #
+        #
+        #
+        # self.circle.deleteLater()
+        # del self.circled, self.circleStatus
+        # # self.showFullScreen()
+        # self.canMove = (True if self.mapBlockSize[0] * self.mapSize[0] > self.width() else False,
+        #                 True if self.mapBlockSize[1] * self.mapSize[1] > self.height() else False)
+        # x, y = (self.width() - self.mapBlockSize[0] * self.mapSize[0]) // 2, (
+        #             self.height() - self.mapBlockSize[1] * self.mapSize[1]) // 2
+        # self.mapMove(x, y, True)
+        # self.isCtrlDown = False
+        #
+        # self.dwsListWidget = None
+        #
+        # # self.choosePathMenu = QFrame(self)
+        # # layout_choosePath = QBoxLayout(QBoxLayout.TopToBottom)
+        # # self.choose_btn_waiting = QPushButton('待命')
+        # # self.choose_btn_waiting.clicked.connect(functools.partial(self.dwCpu, 'waiting'))
+        # # layout_choosePath.addWidget(self.choose_btn_waiting)
+        # # self.choose_btn_attacking = QPushButton('攻击')
+        # # self.choose_btn_attacking.clicked.connect(functools.partial(self.dwCpu, 'attack'))
+        # # layout_choosePath.addWidget(self.choose_btn_attacking)
+        # # self.choose_btn_stealth = QPushButton('隐身')
+        # # self.choose_btn_stealth.clicked.connect(functools.partial(self.dwCpu, 'stealth'))
+        # # layout_choosePath.addWidget(self.choose_btn_stealth)
+        # # self.choose_btn_occupy = QPushButton('占领')
+        # # self.choose_btn_occupy.clicked.connect(functools.partial(self.dwCpu, 'occupy'))
+        # # layout_choosePath.addWidget(self.choose_btn_occupy)
+        # # self.choose_btn_loading = QPushButton('搭载')
+        # # self.choose_btn_loading.clicked.connect(functools.partial(self.dwCpu, 'loading'))
+        # # layout_choosePath.addWidget(self.choose_btn_loading)
+        # # self.choose_btn_unloading = QPushButton('卸载')
+        # # self.choose_btn_unloading.clicked.connect(functools.partial(self.dwCpu, 'unload'))
+        # # layout_choosePath.addWidget(self.choose_btn_unloading)
+        # # self.choose_btn_laymine = QPushButton('布雷')
+        # # self.choose_btn_laymine.clicked.connect(functools.partial(self.dwCpu, 'laymine'))
+        # # layout_choosePath.addWidget(self.choose_btn_laymine)
+        # # self.choose_btn_buy = QPushButton('计划补给')
+        # # self.choose_btn_buy.clicked.connect(functools.partial(self.dwCpu, 'buy'))
+        # # layout_choosePath.addWidget(self.choose_btn_buy)
+        # # self.choosePathMenu.setLayout(layout_choosePath)
+        # # self.choosePathMenu.show()
+        # # self.choosePathMenu.hide()
+        # #
+        # # self.unloadMenu = QFrame(self)
+        # # layout_choosePath = QBoxLayout(QBoxLayout.TopToBottom)
+        # # self.unloadMenuItems = []
+        # # for i in range(5):
+        # #     tem_btn = QPushButton('完成')
+        # #     tem_btn.track = None
+        # #     layout_choosePath.addWidget(tem_btn)
+        # #     tem_btn.clicked.connect(functools.partial(self.dwCpu, 'unloading', tem_btn))
+        # #     # tem_btn.show()
+        # #     self.unloadMenuItems.append(tem_btn)
+        # # self.unloadMenu.setLayout(layout_choosePath)
+        # # self.unloadMenu.show()
+        # # self.unloadMenu.hide()
+        # #
+        # # self.rightMenu = QFrame(self)
+        # # layout_choosePath = QBoxLayout(QBoxLayout.TopToBottom)
+        # # tem_action = QPushButton('胜利条件')
+        # # tem_action.clicked.connect(functools.partial(self.chooseRightMenu, 'beforevictory'))
+        # # layout_choosePath.addWidget(tem_action)
+        # # tem_action = QPushButton('兵力')
+        # # tem_action.clicked.connect(functools.partial(self.chooseRightMenu, 'forces'))
+        # # layout_choosePath.addWidget(tem_action)
+        # # # tem_action = QPushButton('读取记录')
+        # # # tem_action.clicked.connect(functools.partial(self.chooseRightMenu, 'read'))
+        # # # layout_choosePath.addWidget(tem_action)
+        # # tem_action = QPushButton('保存记录')
+        # # tem_action.clicked.connect(functools.partial(self.chooseRightMenu, 'save'))
+        # # layout_choosePath.addWidget(tem_action)
+        # # tem_action = QPushButton('退出')
+        # # tem_action.clicked.connect(functools.partial(self.chooseRightMenu, 'exit'))
+        # # layout_choosePath.addWidget(tem_action)
+        # # tem_action = QPushButton('回合结束')
+        # # tem_action.clicked.connect(functools.partial(self.chooseRightMenu, 'end'))
+        # # layout_choosePath.addWidget(tem_action)
+        # # self.rightMenu.setLayout(layout_choosePath)
+        # # self.rightMenu.show()
+        # # self.rightMenu.hide()
+        # # self.canRightMenuShow = True
+        # #
+        # # self.Head = QFrame(self)
+        # # self.Head.setWindowFlag(Qt.WindowStaysOnTopHint)
+        # # self.Head_head = QLabel(self.Head)
+        # # self.Head_head.setPixmap(
+        # #     QPixmap(resource.find({'usage': 'hero', 'name': self.user['hero']})['pixmap']).scaled(80, 80))
+        # # self.Head_exp = QProgressBar(self.Head)
+        # # self.Head_exp.setMaximum(int(resource.basicData['hero_f'][self.user['hero']]['max_energy']))
+        # # self.Head_exp.setAlignment(Qt.AlignVCenter)
+        # # self.Head_exp.valueChanged.connect(self.proValueChange)
+        # # self.Head_exp.setValue(self.user['exp'])
+        # # self.Head_name = QLabel(self.user['hero'])
+        # # self.Head_money = QLabel('$' + str(int(self.user['money'])))
+        # # head_font = QFont('宋体', 20)
+        # # head_font.setBold(True)
+        # # self.Head_money.setFont(head_font)
+        # # self.Head_name.setFont(head_font)
+        # # self.Head.setStyleSheet('border-radius:5px;background-color:' + self.user['flag'] + ';')
+        # # head_layout = QBoxLayout(QBoxLayout.LeftToRight)
+        # # head_layout_ = QBoxLayout(QBoxLayout.TopToBottom)
+        # # head_layout_.addWidget(self.Head_name)
+        # # head_layout_.addWidget(self.Head_money)
+        # # head_layout_.addWidget(self.Head_exp)
+        # # head_layout.addWidget(self.Head_head)
+        # # head_layout.addLayout(head_layout_)
+        # # self.Head.setLayout(head_layout)
+        # # self.Head.move(0, 0)
+        # # self.Head.show()
+        # # self.Head.raise_()
+        #
+        # self.infoView = InfoView(self)
+        # self.infoView.show()
+        # self.infoView.hide()
+        #
+        #
+        # self.childWindow = QWidget()
+        # self.childWindow.setWindowModality(Qt.ApplicationModal)
+        #
+        # self.talkView = QLabel(self)
+        # self.talkView.setMaximumWidth(400)
+        # # self.talkView.setStyleSheet('border-radius:12px;background-color:white;padding:6px;border-top-left-radius:0;')
+        # self.talkView.setFont(QFont('宋体', 22))
+        # self.talkView.setWordWrap(True)
+        # self.talkView.show()
+        # self.talkView.hide()
+        # self.talkView.mapId = (0, 0)
+        # self.talkView.shouldShow = False
+
+
+        # self.setMouseTracking(True)
+
+    def mapScale(self, shouldBigger=True):
+        min, max = 0, self.mapScalePoint
+        #-------------- can scale--------------------#
+        if ( shouldBigger and self.mapScalePoint == max ) or\
+            (not shouldBigger and self.mapScalePoint == min):
+            return
+        primA = self.width() // 2 - self.children()[0].x(), self.height() // 2 - self.children()[0].y()
+        mapBlockSize = resource.mapScaleList[self.mapScalePoint]['body']
+        self.mapScalePoint = max if shouldBigger else min
+        self.mapBlockSize = resource.mapScaleList[self.mapScalePoint]['body']
+        n = self.mapBlockSize[0] / mapBlockSize[0]
+        primA = self.width() // 2 - round(primA[0] * n), self.height() // 2 - round(primA[1] * n)
+        tem_data = resource.mapScaleList[self.mapScalePoint]
+        tem_children = self.findChildren((Geo, DW))
+        for j, i in enumerate(tem_children):
+            i.scale(tem_data)
+            i.move(primA[1] + i.mapId[1] * self.mapBlockSize[1], primA[0] + i.mapId[0] * self.mapBlockSize[0])
+
+
+
+        move_x = self.mapSize[0] * self.mapBlockSize[0] - self.width()
+        move_y = self.mapSize[1] * self.mapBlockSize[1] - self.height()
+        self.canMove = True if move_x > 0 else False, True if move_y > 0 else False
+        move_x = 0 if move_x > 0 else -move_x // 2
+        move_y = 0 if move_y > 0 else -move_y // 2
+        self.mapMove(move_x, move_y)
+        # self.mapAdjust()
+        # if shouldBigger:
+        #     if self.talkView.shouldShow:
+        #         self.talkView.show()
+        #         tem_geo = self.pointer_geo[self.talkView.mapId[0]][self.talkView.mapId[1]]
+        #         x1, y1 = tem_geo.x()>self.width()//2, tem_geo.y()>self.height()//2
+        #         if not x1 and not y1:
+        #             self.talkView.setStyleSheet(
+        #                 'background-color:white;padding:6px;border-radius:15px;border-top-left-radius:0;')
+        #             x2, y2 = tem_geo.x(), tem_geo.y() + tem_geo.height()
+        #         elif x1 and not y1:
+        #             self.talkView.setStyleSheet(
+        #                 'background-color:white;padding:6px;border-radius:15px;border-top-right-radius:0;')
+        #             x2, y2 = tem_geo.x() - (self.talkView.width() - tem_geo.width()), tem_geo.y() + tem_geo.height()
+        #         elif not x1 and y1:
+        #             self.talkView.setStyleSheet(
+        #                 'background-color:white;padding:6px;border-radius:15px;border-bottom-left-radius:0;')
+        #             x2, y2 = tem_geo.x(), tem_geo.y() - self.talkView.height()
+        #         elif not x1 and not y1:
+        #             self.talkView.setStyleSheet(
+        #                 'background-color:white;padding:6px;border-radius:15px;border-bottom-right-radius:0;')
+        #             x2, y2 = tem_geo.x() - (
+        #                         self.talkView.width() - tem_geo.width()), tem_geo.y() - self.talkView.height()
+        #         self.talkView.move(x2, y2)
+        #     self.Head.show()
+        #     self.Head.move(0, 0)
+        # else:
+        #     self.talkView.hide()
+        #     self.Head.hide()
+
+
+    def mapMove(self, x, y, isforce=False):
+        def move(x, y):
+            for i in self.findChildren(DW, Geo):
+                i.move(i.x() + x, i.y() + y)
+            # for i in self.children():
+            #     if not hasattr(i, 'move'):
+            #         continue
+            #     i.move(i.x() + x, i.y() + y)
+
+        ##----------越界判断----------------#
+        def moveTo(x, y):
+            if x == None and y == None:
+                return
+            elif x == None:
+                for i in self.findChildren(DW, Geo):
+                    i.move(i.x(), y+i.mapId[0]*self.mapBlockSize[0])
+            elif y == None:
+                for i in self.findChildren(DW, Geo):
+                    i.move(x+i.mapId[1]*self.mapBlockSize[1], i.y())
+            else:
+                for i in self.findChildren(DW, Geo):
+                    i.move(x+i.mapId[1]*self.mapBlockSize[1], y+i.mapId[0]*self.mapBlockSize[0])
+
+        if isforce:
+            move(x,y)
+
+        else:
+            lt, rb = self.pointer_geo[0][0], self.pointer_geo[self.mapSize[0]-1][self.mapSize[1]-1]
+
+            moved_x, moved_y = lt.x() + x, lt.y() + y
+
+            if self.canMove[0]:
+                if moved_x < 0:
+                    moved_x = 0
+                elif lt.x() + x < self.width():
+                    moved_x = self.mapSize[0] * self.mapBlockSize[0] - self.width()
+            else:
+                moved_x = None
+
+            if self.canMove[1]:
+                if moved_y < 0:
+                    moved_y = 0
+                elif lt.y() + y < self.width():
+                    moved_y = self.mapSize[1] * self.mapBlockSize[1] - self.height()
+            else:
+                moved_y = None
+
+            moveTo(moved_x, moved_y)
+
+    def moveToDw(self, dw:DW=None, **kwargs):
+        # dw = self.findChild(DW)
+        x, y = self.width()/2 - dw.x(), self.height()/2 - dw.y()
+        if self.pointer_geo[0][0].x() + x >= 0:
+            x = -self.pointer_geo[0][0].x()
+        elif self.pointer_geo[-1][-1].x() + x <= self.width() - self.mapBlockSize[0]:
+            x = self.width() - self.mapBlockSize[0] - self.pointer_geo[-1][-1].x()
+        if self.pointer_geo[0][0].y() + y >= 0:
+            y = -self.pointer_geo[0][0].y()
+        elif self.pointer_geo[-1][-1].y() + y <= self.height() - self.mapBlockSize[1]:
+            y = self.height() - self.mapBlockSize[1] - self.pointer_geo[-1][-1].y()
+        x, y = x if self.canMove[0] else 0, y if self.canMove[1] else 0
+        anime_group = QParallelAnimationGroup(self)
+        for i, i1 in enumerate(self.pointer_geo):
+            for j, j1 in enumerate(i1):
+                # j1.move(x+j1.x(), y+j1.y())
+                tem_anime = QPropertyAnimation(j1, b'pos', self)
+                tem_anime.setStartValue(j1.pos())
+                tem_anime.setEndValue(QPoint(int(x+j1.x()), int(y+j1.y())))
+                tem_anime.setDuration(400)
+                anime_group.addAnimation(tem_anime)
+                if self.pointer_dw[i][j]:
+                    # self.pointer_dw[i][j].move(x+self.pointer_dw[i][j].x(), y+self.pointer_dw[i][j].y())
+                    tem_anime2 = QPropertyAnimation(self.pointer_dw[i][j], b'pos', self)
+                    tem_anime2.setStartValue(self.pointer_dw[i][j].pos())
+                    tem_anime2.setEndValue(QPoint(int(x + self.pointer_dw[i][j].x()), int(y + self.pointer_dw[i][j].y())))
+                    tem_anime2.setDuration(400)
+                    anime_group.addAnimation(tem_anime2)
+        self.screnMoveAnimate = anime_group
+        def animateStopped():
+            while self.screnMoveAnimate.state() != 0:
+                pass
+            postEvent = ScreenMovingEnd(kwargs)
+            QCoreApplication.postEvent(self, postEvent)
+        anime_group.start()
+        if kwargs:
+            myThread(target=animateStopped).start()
+
+    '''选择， 移动， 缩放'''
+
+    def mousePressEvent(self, a0: QtGui.QMouseEvent) -> None:
+        if a0.button() == 1:
+            resource.player['btn'].play()
+        if not self.isRun:
+            return
+        # self.
+        if a0.button() == 2:
+            self.hasMove = a0.pos()
+        # if a0.button() == 1 and not self.hasMove:
+        #     if self.choose_status == None:  # 0:
+        #         self.clear(None)
+        #         for i in self.findChildren(DW):
+        #             if i.track['flag'] in self.user['enemy'] and i.isHidden():
+        #                 continue
+        #             if i.contains(a0.pos()):
+        #                 self.dwChoosed = i
+        #                 self.costMap = self.costAreaCount(i)
+        #                 self.dwCpu('showarea', self.costMap)
+        #                 self.choose_status = 'areashowed'
+        #                 break
+        #         else:
+        #             if self.user['flag'] != self.tUser['flag']:
+        #                 return
+        #             tem_dw = self.childAt(a0.pos())
+        #             if hasattr(tem_dw, 'track'):
+        #                 if tem_dw.track['usage'] == 'build':
+        #                     if tem_dw.track['flag'] == self.user['flag'] and tem_dw.track['name'] in ['factory',
+        #                                                                                               'shipyard',
+        #                                                                                               'airport']:
+        #                         self.clear(None)
+        #                         self.dwChoosed = tuple(tem_dw.mapId)
+        #                         self.dwCpu('showbuild', tem_dw.track['name'])
+        #                     else:
+        #                         self.clear(None)
+        #                 else:
+        #                     self.clear(None)
+        #             else:
+        #                 self.clear(None)
+        #
+        #     elif self.choose_status == 'areashowed':  # 1: user want to choose a tartget to show paths
+        #         if self.user['flag'] != self.tUser['flag']:
+        #             self.clear(None)
+        #         for i in self.areaToChoose:
+        #             if i.geometry().contains(a0.pos()):
+        #                 self.targetsToChoose['choosed'] = tuple(i.mapId)
+        #                 for j in self.choosePathMenu.findChildren(QPushButton):
+        #                     j.hide()
+        #                 self.choose_btn_waiting.show()
+        #
+        #                 # 过滤 敌方单位，已移动过的单位
+        #                 if self.dwChoosed.moved or self.dwChoosed.track['flag'] != self.user['flag']:
+        #                     self.clear(None)
+        #                     return
+        #
+        #                 ###补给计划
+        #                 if tuple(self.dwChoosed.mapId) == tuple(i.mapId):
+        #                     if 'transport' in self.dwChoosed.track['name']:
+        #                         if self.suppliesCount():
+        #                             if self.dwChoosed.moved:
+        #                                 self.dwCpu('buy')
+        #                             else:
+        #                                 self.choose_btn_buy.show()
+        #                     ###原地布雷
+        #                     elif resource.basicData['money']['canlaymine'][self.dwChoosed.track['name']] == '1':
+        #                         self.choose_btn_laymine.show()
+        #
+        #                 tem_dw = self.pointer_dw[i.mapId[0]][i.mapId[1]]  #####应小心改变它的值 ,可能值为：运输单位，None，隐形敌方单位
+        #                 if tem_dw:
+        #                     if tem_dw.track['flag'] in self.user['enemy'] and tem_dw.isHidden():
+        #                         tem_dw = None
+        #
+        #                 ###占领
+        #                 if self.pointer_geo[i.mapId[0]][i.mapId[1]].track['usage'] == 'build' and \
+        #                         resource.basicData['money']['classify'][self.dwChoosed.track['name']] == 'foot':
+        #                     if self.pointer_geo[i.mapId[0]][i.mapId[1]].track['flag'] in self.user['enemy'] or \
+        #                             self.pointer_geo[i.mapId[0]][i.mapId[1]].track['flag'] == 'none':
+        #                         self.choose_btn_occupy.show()
+        #
+        #                 ###攻击
+        #                 if (resource.basicData['gf'][self.dwChoosed.track['name']]['attackAftermove'] == '0' and \
+        #                     tuple(self.dwChoosed.mapId) == tuple(i.mapId)) or \
+        #                         resource.basicData['gf'][self.dwChoosed.track['name']]['attackAftermove'] == '1':
+        #                     tem_end = self.findTarget(self.dwChoosed, i.mapId)
+        #                     if not tem_end:
+        #                         self.choose_btn_attacking.show()
+        #
+        #                 ###隐身
+        #                 if resource.basicData['money']['canstealth'][self.dwChoosed.track['name']] == '1':
+        #                     if self.dwChoosed.isStealth:
+        #                         self.choose_btn_stealth.setText('显身')
+        #                     else:
+        #                         self.choose_btn_stealth.setText('隐身')
+        #                     self.choose_btn_stealth.show()
+        #                 if resource.basicData['money']['candiving'][self.dwChoosed.track['name']] == '1':
+        #                     if self.dwChoosed.isDiving:
+        #                         self.choose_btn_stealth.setText('上浮')
+        #                     else:
+        #                         self.choose_btn_stealth.setText('下潜')
+        #                     self.choose_btn_stealth.show()
+        #                 ####装载
+        #                 if tem_dw and tuple(i.mapId) != tuple(self.dwChoosed.mapId):
+        #                     if tem_dw.track['name'] in \
+        #                             resource.basicData['money']['canloading'][tem_dw.track['name']] or \
+        #                             resource.basicData['money']['classify'][self.dwChoosed.track['name']] in \
+        #                             resource.basicData['money']['canloading'][tem_dw.track['name']]:
+        #                         if len(tem_dw.loadings) < int(
+        #                                 resource.basicData['money']['canloading'][tem_dw.track['name']][0:1]):
+        #                             for j in self.choosePathMenu.findChildren(QPushButton):
+        #                                 j.hide()
+        #                             self.choose_btn_loading.show()
+        #                         else:  # 过滤装满的单位
+        #                             continue
+        #                     else:  ##过滤 友方己方单位
+        #                         continue
+        #                 ####卸载
+        #                 if self.dwChoosed.loadings:
+        #                     self.planToUnload['data'] = []
+        #                     directions = [(1, 0), (-1, 0), (0, 1), (0, -1)]
+        #                     cols = len(self.map['map'][0])
+        #                     rows = len(self.map['map'])
+        #                     for k in self.dwChoosed.loadings:
+        #                         for j in self.planToUnload['data']:
+        #                             if j[0] == k:
+        #                                 break
+        #                         else:
+        #                             odk2 = []
+        #                             for j in directions:
+        #                                 x, y = i.mapId[0] + j[0], i.mapId[1] + j[1]
+        #                                 if x >= 0 and x < rows and y >= 0 and y < cols:
+        #                                     if int(resource.basicData['move'][k['name']][
+        #                                                self.pointer_geo[x][y].track['name']]) < 99 and not \
+        #                                     self.pointer_dw[x][y]:
+        #                                         odk2.append((x, y))
+        #                             if odk2:
+        #                                 self.planToUnload['data'].append([k, odk2, False])
+        #                     if self.planToUnload['data']:
+        #                         self.choose_btn_unloading.show()
+        #                         for j in self.unloadMenuItems:
+        #                             j.hide()
+        #                         for j1, j in enumerate(self.planToUnload['data']):
+        #                             self.unloadMenuItems[j1].setText(
+        #                                 resource.basicData['money']['chineseName'][j[0]['name']])
+        #                             self.unloadMenuItems[j1].setIcon(QIcon(resource.find(
+        #                                 {'usage': 'dw', 'flag': self.user['flag'], 'action': 'left',
+        #                                  'name': j[0]['name']})['pixmap']))
+        #                             self.unloadMenuItems[j1].track = j[0]
+        #
+        #                 #####显示路径
+        #                 self.roadsToChoose['roads'] = self.roadCount(self.dwChoosed, i.mapId, self.costMap)
+        #                 self.dwCpu('showpath')
+        #
+        #                 ###显示菜单
+        #                 x1, y1 = a0.x(), a0.y()
+        #                 if x1 + self.choosePathMenu.width() > self.width():
+        #                     x1 = self.width() - self.choosePathMenu.width()
+        #                 if y1 + self.choosePathMenu.height() > self.height():
+        #                     y1 = self.height() - self.choosePathMenu.height()
+        #                 self.choosePathMenu.move(x1, y1)
+        #                 self.choosePathMenu.show()
+        #                 self.choosePathMenu.raise_()
+        #                 self.choose_status = 'pathshowed'  # 2
+        #                 break
+        #         else:
+        #             self.clear(None)
+        #
+        #     elif self.choose_status == 'targetshowed':  # 3:
+        #         for i in self.targetsToChoose['layers']:
+        #             if i.geometry().contains(a0.pos()):
+        #                 self.targetsToChoose['choosed'] = i.mapId
+        #                 self.dwCpu('attacking')
+        #                 break
+        #         else:
+        #             self.clear(None)
+        #             self.choosePathMenu.hide()
+        #
+        #     elif self.choose_status == 'unloadingshow':
+        #         for i in self.planToUnload['layers']:
+        #             if i.geometry().contains(a0.pos()) and not i.isBlack:
+        #                 for j in self.unloadMenuItems:
+        #                     j.hide()
+        #                 self.planToUnload['loc'] = i.mapId
+        #                 for j in self.unloadMenuItems:
+        #                     for k in self.planToUnload['data']:
+        #                         if k[0] == j.track:
+        #                             if tuple(i.mapId) in k[1] and not k[2]:
+        #                                 j.show()
+        #                 self.unloadMenuItems[-1].show()
+        #                 x1, y1 = a0.x(), a0.y()
+        #                 if x1 + self.unloadMenu.width() > self.width():
+        #                     x1 = self.width() - self.unloadMenu.width()
+        #                 if y1 + self.unloadMenu.height() > self.height():
+        #                     y1 = self.height() - self.unloadMenu.height()
+        #                 self.unloadMenu.move(x1, y1)
+        #                 self.unloadMenu.show()
+        #                 self.unloadMenu.raise_()
+        #                 break
+        #             elif i.isBlack:
+        #                 continue
+        #         else:
+        #             self.clear(None)
+        #
+        #     else:
+        #         self.clear(None)
+        #         self.rightMenu.hide()
+        #         self.choosePathMenu.hide()
+        # elif a0.button() == 2:
+            # if self.choose_status == None:
+            #     self.hasMove = a0.pos()
+            #     self.clear(None)
+            # else:
+                # self.clear('return')
+        # elif a0.button() == 4:
+        #     self.clear(None)
+        #     for i in self.findChildren(DW):
+        #         if i.contains(a0.pos()):
+        #             self.infoView.updateInfo(i.makeTrack())
+        #             self.infoView.move(a0.pos())
+        #             self.infoView.show()
+        #             self.infoView.raise_()
+        #             self.choose_status = 'showDwInfo'
+        #             break
+
+    def mouseReleaseEvent(self, a0: QtGui.QMouseEvent) -> None:
+        if not self.isRun:
+            return
+
+        if a0.button() == 2:
+            self.hasMove = None
+
+    def mouseMoveEvent(self, a0: QtGui.QMouseEvent) -> None:
+        if not self.isRun:
+            return
+        if not self.hasMove:
+            return
+        x, y = a0.x() - self.hasMove.x(), a0.y() - self.hasMove.y()
+        self.hasMove = a0.pos()
+        self.mapMove(x, y)
+
+    def wheelEvent(self, a0: QtGui.QWheelEvent = None) -> None:
+        if self.isCtrlDown:
+            if self.isRun:
+                # self.clear(None)
+                self.mapScale(True if a0.angleDelta().y() > 0 else False)
+            return
+
+
+
+    def keyPressEvent(self, a0: QtGui.QKeyEvent) -> None:
+        if a0.key() == Qt.Key_Control:
+            self.isCtrlDown = True
+
+    def keyReleaseEvent(self, a0: QtGui.QKeyEvent) -> None:
+        if a0.key() == Qt.Key_Control:
+            self.isCtrlDown = False
+
+    def checkUsers(self):
+        pass
+
+class mapRightMenu(QWidget):
+    def __init__(self, parent):
+        super(mapRightMenu, self).__init__(parent)
+###--------------------暂不考虑触发器----------------------------###
+if __name__ == '__main__':
+    # hereusers = [{'flag': 'red', 'enemy': ['blue', 'yellow'], 'action': 'right', 'command_bg': '会战', 'command': '消灭敌方', \
+    #                'outcome': 0, 'money': 99999, 'hero': 'google', 'header_loc': None, 'canBeGua': False, 'bout': 1,
+    #                'exp': 2}, \
+    #               {'flag': 'blue', 'enemy': ['red', 'yellow'], 'action': 'left', 'command_bg': '会战', 'command': '消灭敌方', \
+    #                'outcome': 0, 'money': 0, 'hero': 'warhton', 'header_loc': None, 'canBeGua': False, 'bout': 1,
+    #                'exp': 2}]
+    #
+    # window = TMap(users=hereusers, tUser=hereusers[0])
+    # window.show()
+    fuse = {
+        'red': {'heroName': 'google', 'isMe': True, \
+                'userInfo': {'userId': '123', 'userName': 'sdfd'}}, \
+        'blue': {'heroName': 'google', 'isMe': False, \
+                 'userInfo': {'userId': '123', 'userName': 'sdfd'}}, \
+        'green': {'heroName': 'google', 'isMe': False, \
+                  'userInfo': {'userId': '123', 'userName': 'sdfd'}}
+                }
+    window = TMap_(fuse)
+    window.show()
     sys.exit(qapp.exec_())
