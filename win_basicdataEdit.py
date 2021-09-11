@@ -52,18 +52,21 @@ class basicEditW(QMainWindow):
         super(basicEditW, self).__init__()
         self.path = path
         self.data = {}
-        # self.isPath = True if data == None else False
-        # self.data = data if not self.isPath else {}
+
         self.initUI()
+        self.readData()
+        # print(self.data)
 
     def initUI(self):
         self.setWindowTitle('基础数据编辑')
         self.setFixedSize(1280, 800)
         geos = self.getInitData()
         dws = self.getInitData('dw')
-        hero = ['warhton', 'google']
+        hero = []
+        for i in resource.findAll({'usage':'hero', 'action':'head'}):
+            hero.append(i['name'])
         attrs = ['move_distance', 'view_distance', 'gf_g', 'gf_f', 'gf_mindistance', 'gf_maxdistance', 'money', 'oil', 'bullect', 'skill_dsc']
-        attrs_1 = ['money', 'chineseName', 'classify', 'canoccupy', 'candiving', 'canloading', 'cansupply', 'canstealth', 'canlaymine', 'daycost', 'dsc', 'sound_move', 'sound_fight']
+        attrs_1 = ['money', 'chineseName', 'classify', 'canoccupy', 'candiving', 'canloading', 'cansupply', 'canstealth', 'canlaymine', 'daycost', 'canunloadbyfly', 'dsc', 'sound_move', 'sound_fight']
 
         self.data_move = QTableWidget(self)
         self.data_move.setColumnCount(len(geos)+1)
@@ -250,9 +253,6 @@ class basicEditW(QMainWindow):
         self.area.setWidget(self.center)
         self.setCentralWidget(self.area)
 
-        if os.path.exists(self.path):
-            self.readData()
-
     def getInitData(self, type='geo'):
         end = []
         if type == 'geo':
@@ -279,8 +279,8 @@ class basicEditW(QMainWindow):
                 for j in range(0, k.columnCount()):
                     # print(k.verticalHeaderItem(i), k.horizontalHeaderItem(j))
                     self.data[main_data_key[k1]][k.verticalHeaderItem(i).text()][k.horizontalHeaderItem(j).text()] = k.item(i, j).text()
-        # print(end)
-        # if self.isPath:
+
+
         with open(self.path, 'w') as f:
             json.dump(self.data, f)
 
@@ -305,8 +305,9 @@ class basicEditW(QMainWindow):
 
 
 if __name__ == '__main__':
-    # tem = {'123':123}
     window = basicEditW()
+
     window.show()
-    # print(tem)
-    sys.exit(Qapp.exec_())
+
+    Qapp.exec_()
+

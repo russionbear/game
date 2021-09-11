@@ -24,13 +24,14 @@ class DW(QWidget):
                'blood': 10, 'moved': False, 'occupied': 0, 'loadings': [], 'isDiving': False, 'isStealth': False,
                'supplies': {}}
         key.update(newkey)
+        scaly = resource.mapScaleList[resource.mapScaleDoublePoint]
         self.track = resource.find(key)
         self.mapId = key['mapId']
-        self.bodySize = (100, 100)
+        self.bodySize = scaly['body']
         self.resize(self.bodySize[0], self.bodySize[1])
         self.occupied = key['occupied']
         self.loadings = key['loadings']
-        self.bloodSize = 30
+        self.bloodSize = scaly['font']
         self.isStealth = key['isStealth']
         self.isDiving = key['isDiving']
         self.bloodValue = key['blood']
@@ -40,7 +41,7 @@ class DW(QWidget):
         self.supplies = key['supplies']
         del key['blood'], key['oil'], key['bullect']
         self.bloodFont = QFont('宋体', self.bloodSize)
-        self.statusSize = 40, 40
+        self.statusSize = scaly['tag']
         self.statusList = [None for i in range(7)]
         self.statusPoint = 0
         self.initUI()
@@ -73,6 +74,7 @@ class DW(QWidget):
         layout.addWidget(self.body)
         self.setLayout(layout)
         self.status.clear()
+        self.show()
 
         # self.setFrameShape(QFrame.Box)
         # self.setFrameShadow(QFrame.Raised)
@@ -110,6 +112,10 @@ class DW(QWidget):
             pm = tem['pixmap'].scaled(round(self.bodySize[0]), round(self.bodySize[1]))
             self.body.setPixmap(pm)
             self.track = tem
+            if str[-1] == 'G':
+                self.moved = True
+            else:
+                self.moved = False
 
     def scale(self, data):
         self.bodySize = data['body']
@@ -185,8 +191,7 @@ class Geo(QLabel):
         super(Geo, self).__init__(parent)
         key = {'usage':'geo', 'name':'plain'}
         key.update(newKey)
-        # print(key, newKey)
-        self.track = key
+        self.track = resource.find(key)
         self.mapId = key['mapId']
         self.initUI()
 
@@ -203,7 +208,8 @@ class Geo(QLabel):
         try:
             self.setPixmap(self.track['pixmap'].scaled(self.width(), self.height()))
         except TypeError:
-            print(self.track, self.mapId)
+            print(self.track, track, self.mapId, 'map_load ;geo ;change error')
+            sys.exit()
 
     def scale(self, data):
         self.size_ = data['body']
@@ -217,6 +223,169 @@ class Geo(QLabel):
             return True
         else:
             return False
+
+class GeoD(QRect, QObject):
+    def __init__(self, parent, newKey={}):
+        super(GeoD, self).__init__(parent)
+        QRect.__init__(self)
+        # QObject.__init__(self, parent)
+        # self.setParent(parent)
+        key = {'usage':'geo', 'name':'plain'}
+        key.update(newKey)
+        self.track = resource.find(key)
+        self.primTrack = self.track.copy()
+        self.mapId = key['mapId']
+        self.label = None
+        # self.parent_ = parent
+        size = resource.mapScaleList[resource.mapScaleDoublePoint]['body']
+        self.setSize(QSize(size[0], size[1]))
+
+    def change(self, track):
+        self.track.update(track)
+        self.track = resource.find(self.track)
+        if self.track['name'] != self.primTrack['name']:
+            if self.label:
+                try:
+                    self.label.deleteLater()
+                    self.label = None
+                except RuntimeError:
+                    pass
+                self.label = None
+            self.label = QLabel(self.parent_)
+            self.label.resize(self.size)
+            self.label.setPixmap(self.track['pximap'].scaled(self.width(), self.height()))
+            self.label.setScaledContents(True)
+        else:
+            if self.label:
+                try:
+                    self.label.deleteLater()
+                except RuntimeError:
+                    pass
+                self.label = None
+
+    def geometry(self):
+        return QRect(self.x(), self.y(), self.width(), self.height())
+
+    def contains(self, pos):
+        return super(GeoD, self).contains(pos)
+
+    def pos(self):
+        return QPoint(self.x(), self.y())
+
+    def move(self, x, y):
+        QRect.moveTo(self, x, y)
+        if self.label:
+            self.label.move(x, y)
+
+
+    def scale(self, data):
+        self.setSize(QSize(data['body'][0], data['body'][1]))
+        if self.label:
+            self.label.resize(self.size())
+
+    def show(self):
+        super(GeoD, self).show()
+        if self.label:
+            self.label.show()
+
+
+'''不可删'''
+# class GeoD(QObject, QRect):
+#     def __init__(self, parent, newKey={}):
+#         super(GeoD, self).__init__(parent)
+#         QRect.__init__(self)
+#         # super(GeoD, self).__init__()
+#         key = {'usage':'geo', 'name':'plain'}
+#         key.update(newKey)
+#         # self.rect = QRect()
+#         self.x = 0
+#         self.y = 0
+#         self.track = resource.find(key)
+#         self.primTrack = self.track.copy()
+#         self.mapId = key['mapId']
+#         self.label = None
+#         self.parent_ = parent
+#         size = resource.mapScaleList[resource.mapScaleDoublePoint]['body']
+#         # self.setSize(QSize(size[0], size[1]))
+#         # self.rect.setSize(QSize(size[0], size[1]))
+#         self.size = size
+# 
+#     def x(self):
+#         return self.x
+# 
+#     def y(self):
+#         return self.x
+# 
+#     def width(self):
+#         return self.size[0]
+# 
+#     def height(self):
+#         return self.size[1]
+# 
+#     def size(self):
+#         return QSize(self.width(), self.height())
+# 
+#     def change(self, track):
+#         self.track.update(track)
+#         self.track = resource.find(self.track)
+#         if self.track['name'] != self.primTrack['name']:
+#             if self.label:
+#                 try:
+#                     self.label.deleteLater()
+#                     self.label = None
+#                 except RuntimeError:
+#                     pass
+#                 self.label = None
+#             self.label = QLabel(self.parent_)
+#             self.label.resize(self.size)
+#             self.label.setPixmap(self.track['pximap'].scaled(self.width(), self.height()))
+#             self.label.setScaledContents(True)
+#         else:
+#             if self.label:
+#                 try:
+#                     self.label.deleteLater()
+#                 except RuntimeError:
+#                     pass
+#                 self.label = None
+# 
+#     def geometry(self):
+#         return QRect(self.x, self.y, self.width(), self.height())
+# 
+#     def contains(self, pos):
+#         if self.geometry().contains(pos):
+#             return True
+#         return False
+# 
+#     def move(self, x, y):
+#         # self.moveTo(x, y)
+#         # self.rect.setX(x)
+#         # self.rect.setY(y)
+#         self.x, self.y = x, y
+#         # print(x, y)
+#         if self.label:
+#             self.label.move(x, y)
+# 
+# 
+#     def pos(self):
+#         # return super(GeoD, self).pos()
+#         return QPoint(self.x, self.y)
+# 
+#     def scale(self, data):
+#         # self.setSize(QSize(data['body'][0], data['body'][1]))
+#         # self.rect.setWidth(data['body'][0])
+#         # self.rect.setHeight(data['body'][1])
+#         self.size = tuple(data['body'])
+#         if self.label:
+#             self.label.resize(self.size())
+# 
+#     def parent(self):
+#         return self.parent_
+# 
+#     def show(self):
+#         if self.label:
+#             self.label.show()
+
+
 
 class VMap(QWidget):
     def initUI(self, name='test', parent=None, block=(100, 100), winSize=(800, 800), brother=None):
@@ -689,19 +858,20 @@ class miniVMap(QWidget):
             dw.move(axis[1] * self.mapBlockSize[1], axis[0] * self.mapBlockSize[0])
             dw.scale(resource.mapScaleList[self.mapScalePoint])
 
-# dw = DW(window, QtCore.Qt.FramelessWindowHint)
-# dw.init()
-# geo = Geo(window)
-# geo.change('tree')
-# geo.scale(2)
+class Arbitrator(QObject):
+    def __init__(self):
+        super(Arbitrator, self).__init__()
 
-# window.children()[0].scale(resource.mapScaleList[14])
-# window.mapMove(50, 50)
+arbitrator = Arbitrator()
 
 if __name__ == '__main__':
-    window = VMap()
-    window.initUI()
-    # window.modify([],None)
-    # window.collectMap()
-    window.show()
+    # window = VMap()
+    # window.initUI()
+    # # window.modify([],None)
+    # # window.collectMap()
+    # window.show()
+    # sys.exit(Qapp.exec_())
+    geo = GeoD()
+    # geo
+
     sys.exit(Qapp.exec_())

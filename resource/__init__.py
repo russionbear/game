@@ -10,7 +10,7 @@ import time
 
 from PyQt5 import QtCore, QtGui
 from PyQt5.QtMultimedia import QMediaPlaylist, QMediaContent, QMediaPlayer, QSound
-from PyQt5.Qt import QApplication, QWidget, QLabel, QPixmap, QUrl, QPushButton
+from PyQt5.Qt import QApplication, QWidget, QLabel, QPixmap, QUrl, QPushButton, QImage
 import sys
 import os
 import shutil
@@ -18,6 +18,8 @@ import json
 import re
 import base64
 import hashlib
+import numpy
+from PIL import Image
 
 
 # from game import EVN
@@ -27,32 +29,48 @@ Qapp = QApplication(sys.argv)
 
 class Resource():
     def __init__(self):
+        with open('resource/ini.json', 'r') as f:
+            initData = json.load(f)
+
         with open('resource/userInfo.json', 'r') as f:
             self.userInfo = json.load(f)
 
         self.maps = os.listdir('maps')
 
         self.mapScaleList = []  # {'body':(100, 100),'font':30, 'tag':(40, 40)},
+        self.mapScaleDoublePoint = initData['mapScalePoint']
         for i in range(10, 201, 10):
             self.mapScaleList.append({'body': (i, i), 'font': 10 + i // 5, 'tag': (i * 2 // 5, i * 2 // 5)})
 
-        with open('resource/ini.json', 'r') as f:
-            lastMap = json.load(f)['lastMap']
-        self.initMap(lastMap)
+        self.initMap(initData['lastMap'])
 
-    def initMap(self, mapName):
+    def initMap(self, mapName, isTmp=False):
+        basic_path = ['stories', 'lines', 'basicInfo', 'backup', 'toggles', 'toggleEvents', 'rule']
+        for i in basic_path:
+            path = 'maps/'+mapName+'/'+i+'.json'
+            if not os.path.exists(path):
+                with open(path, 'w') as f:
+                    json.dump({}, f)
+
         self.mapName = mapName
         self.data = []
         self.initImageData(mapName)
         self.player = {}
         self.initPlayer(mapName)
-        self.basicData = self.initBasicData(mapName)
+
+        self.initBasicData(mapName)
+        self.initLines(mapName)
         self.initRecords(mapName)
-        with open('resource/ini.json', 'r') as f:
-            tem_data = json.load(f)
-        tem_data['lastMap'] = mapName
-        with open('resource/ini.json', 'w') as f:
-            json.dump(tem_data, f)
+        self.initBackup(mapName)
+        self.initStories(mapName)
+        self.initHeroAtrs(mapName)
+
+        if not isTmp:
+            with open('resource/ini.json', 'r') as f:
+                tem_data = json.load(f)
+            tem_data['lastMap'] = mapName
+            with open('resource/ini.json', 'w') as f:
+                json.dump(tem_data, f)
 
     def initImageData(self, mapName):
         '''for developer'''
@@ -79,7 +97,7 @@ class Resource():
             for j in range(len(com)):
                 com_02[keys[j]] = com[j]
             if i in tt_data:
-                com_pm = QPixmap('resource/'+i)
+                com_pm = QPixmap('maps/'+mapName+'/images/'+i)
             else:
                 com_pm = QPixmap('resource/images/'+i)
             # com_pm = QPixmap(self.imageRoot+'/'+i)
@@ -91,12 +109,52 @@ class Resource():
             self.data.append(com_02)
 
     def initBasicData(self, mapName):
-        if os.path.exists(mapName):
-            path = 'maps/'+mapName+'/basicInfo.json'
-        else:
+        path = 'maps/'+mapName+'/basicInfo.json'
+        if not os.path.exists(path):
             path = 'resource/basicInfo.json'
         with open(path, 'r') as f:
-            return json.load(f)
+            self.basicData = json.load(f)
+
+    def initLines(self, mapName):
+        path = 'maps/'+mapName+'/lines.json'
+        if not os.path.exists(path):
+            path = 'resource/lines.json'
+        with open(path, 'r') as f:
+            self.storage_lines = json.load(f)
+            try:
+                self.lines = self.storage_lines[list(self.storage_lines.keys())[0]]
+            except (KeyError, IndexError):
+                self.lines = {}
+
+    def initStories(self, mapName):
+        path = 'maps/' + mapName + '/stories.json'
+        if not os.path.exists(path):
+            path = 'resource/stories.json'
+        with open(path, 'r') as f:
+            self.storage_stories = json.load(f)
+            try:
+                self.story = self.storage_stories[list(self.storage_stories.keys())[0]]
+            except (KeyError, IndexError):
+                self.story = {}
+
+    def initBackup(self, mapName):
+        path = 'maps/' + mapName + '/backup.json'
+        if not os.path.exists(path):
+            path = 'resource/backup.json'
+        with open(path, 'r') as f:
+            self.storage_backup = json.load(f)
+            try:
+                self.backup = self.storage_backup[list(self.storage_backup.keys())[0]]
+            except (KeyError, IndexError):
+                self.backup = {}
+
+    def initHeroAtrs(self, mapName):
+        path = 'maps/' + mapName + '/heroAtrs.json'
+        if not os.path.exists(path):
+            self.heroAtrs = {}
+        else:
+            with open(path, 'r') as f:
+                self.heroAtrs = json.load(f)
 
     def initRecords(self, mapName):
         if os.path.exists('maps/'+mapName+'/records.json'):
@@ -121,6 +179,12 @@ class Resource():
             else:
                 self.player[i[:-4]].setLoops(999999)
 
+    def swapLines(self, key):
+        self.lines = self.storage_lines[key]
+
+    def swapBasicData(self, key):
+        self.basicData = self.storage_basicData[key]
+
     '''查找数据'''
     def find(self, key={}):
         key1 = ['usage', 'name', 'flag', 'action']
@@ -135,7 +199,6 @@ class Resource():
                 return i.copy()
         return None
 
-
     def findAll(self, key={}):
         end = []
         for i in self.data:
@@ -148,53 +211,14 @@ class Resource():
                 end.append(i.copy())
         return end
 
-    # def getSingleData(self):
-    #     if i['name'] == 'sea' and i['action'] != '':
-    #         continue
-    #     elif i['name'] == 'road' and i['action'] != 'across':
-    #         continue
-    #     elif i['name'] == 'river' and i['action'] != 'across':
-    #         continue
-    #     elif i['action'] not in ['left', 'across', '', 'center']:
-    #         continue
-    #     elif i['usage'] == 'dw2':
-    #         continue
-
     def findByHafuman(self, hafuman):
         for i in self.data:
             if i['base64'] == hafuman:
                 return i
         else:
             return None
-        # tem = self.findHafuman(hafuman, False)
-        # if tem == None:
-        #     # print(tem)
-        #     return None
-        # # print('rere')
-        # for i in self.data:
-        #     if i['base64'] == tem:
-        #         return i.copy()
-        # else:
-        #     return None
 
     '''操作地图'''
-    # ### 没有->一并改掉
-    # def saveMap(self, map=None, priName=None):
-    #     if map:
-    #         if priName:
-    #             for i in range(len(self.maps)):
-    #                 if self.maps[i]['name'] == priName:
-    #                     self.maps[i] = map
-    #                     break
-    #         else:
-    #             for i in range(len(self.maps)):
-    #                 if self.maps[i]['name'] == map['name']:
-    #                     self.maps[i] = map
-    #                     break
-    #             else:
-    #                 self.maps.append(map)
-    #     with open(self.mapPath, 'w') as f:
-    #         json.dump(self.maps, f)
     def saveMap(self, priName, newName=None, map=None, rule=None, imagePath=None, soundPath=None, basicInfo=None, lines=None):
         if not os.path.exists('maps/'+priName+'/map.json'):
             # print('map not exit')
@@ -222,17 +246,74 @@ class Resource():
                 json.dump(lines, f)
         if imagePath:
             if os.path.exists(imagePath):
-                shutil.copytree(imagePath, 'maps/'+priName+'/images')
-        if imagePath:
-            if os.path.exists(imagePath):
                 if os.path.exists('maps/'+priName+'/images'):
                     shutil.rmtree('maps/'+priName+'/images')
-                shutil.copytree(imagePath, 'maps/'+priName+'/images')
+                    os.mkdir('maps/'+priName+'/images')
+                # shutil.copytree(imagePath, 'maps/'+priName+'/images')
+                tem_mode1 = os.listdir('resource/images')
+                tem_mode2 = []
+                for i in tem_mode1:
+                    tem_data = i.split('.')
+                    tem_data = tem_data[0].split('_')
+                    if tem_data[0] == 'hero':
+                        continue
+                    tem_mode2.append(i)
+                end1 = os.listdir(imagePath)
+                end2 = []
+                end3 = []
+                end4 = []
+                for i in end1:
+                    if i in tem_mode2:
+                        end2.append(i)
+                    else:
+                        tem_data = i.split('.')
+                        if len(tem_data) != 2:
+                            continue
+                        tem_data = tem_data[0].split('_')
+                        if len(tem_data) != 4:
+                            continue
+                        if tem_data[0] != 'hero' or tem_data[2] != '' or tem_data[3] not in ['head', 'post']:
+                            continue
+                        end3.append(i)
+                for i in end3:
+                    tem_data = i.split('.')
+                    tem_data_ = tem_data[0].split('_')
+                    if tem_data_[3] == 'post':
+                        tem_data_[3] = 'head'
+                    else:
+                        tem_data_[3] = 'post'
+                    newPath = '-'.join(tem_data_)+tem_data[1]
+                    if newPath not in end3:
+                        continue
+                    end4.append(newPath)
+                end3 = []
+                end2 += end4
+                for i in tem_mode2:
+                    if i not in end2:
+                        end3.append(i)
+                for i in end2:
+                    shutil.copy(imagePath+'/'+i, 'maps/'+priName+'/images/'+i)
+                # for i in end3:
+                #     shutil.copy('resource/images/'+i, 'maps/'+priName+'/images/'+i)
         if soundPath:
             if os.path.exists(soundPath):
                 if os.path.exists('maps/'+priName+'/sounds'):
                     shutil.rmtree('maps/'+priName+'/sounds')
-                shutil.copytree(soundPath, 'maps/'+priName+'/sounds')
+                    os.mkdir('maps/'+priName+'/sounds')
+                tem_mode1 = os.listdir('resource/images')
+                end1 = os.listdir(soundPath)
+                end = []
+                for i in end1:
+                    if i in tem_mode1:
+                        end.append(i)
+                end_ = []
+                for i in tem_mode1:
+                    if i not in end:
+                        end_.append(i)
+                for i in end:
+                    shutil.copy(imagePath + '/' + i, 'maps/' + priName + '/sounds/' + i)
+                # for i in end_:
+                #     shutil.copy('resource/sounds/' + i, 'maps/' + priName + '/sounds/' + i)
 
     def getAllMaps(self):
         end = []
@@ -242,7 +323,7 @@ class Resource():
             end.append(tem_data)
         return end
 
-    ####只用于创建json文件
+    ##-------------只用于创建json文件------------------
     def makeMap(self, name, dsc='', type='random', mapSize=(10, 10)):
         print(name, dsc, type, mapSize)
         hufumans = []
@@ -329,27 +410,62 @@ class Resource():
         with open(self.userPath, 'w') as f:
             json.dump(user, f)
 
+    ###------------------------------------#
+    def makeMapGeoImage(self):
+        tem_map = self.findMap(self.mapName)
+        for scale_n_, scale_n in enumerate([self.mapScaleList[0]['body'], self.mapScaleList[self.mapScaleDoublePoint]['body']]):
+            image = None
+            for i1, i in enumerate(tem_map['map']):
+                tem_image = None
+                for j1, j in enumerate(i):
+                    tem_track = self.findByHafuman(j)
+                    tem_path_ = tem_track['usage']+'_'+tem_track['name']+'_'+tem_track['flag']+'_'+tem_track['action']+'.gif'
+                    tem_path = 'maps/'+self.mapName+'/images/'+tem_path_
+                    if j1 == 0:
+                        if os.path.exists(tem_path):
+                            img = Image.open(tem_path)
+                            img = img.resize(scale_n)
+                            img = img.convert('RGBA')
+                            tem_image = numpy.array(img)
+                        else:
+                            img = Image.open('resource/images/'+tem_path_)
+                            img = img.resize(scale_n)
+                            img = img.convert('RGBA')
+                            tem_image = numpy.array(img)
+                    else:
+                        if os.path.exists(tem_path):
+                            img = Image.open(tem_path)
+                            img = img.resize(scale_n)
+                            img = img.convert('RGBA')
+                            tem_image = numpy.concatenate((tem_image, numpy.array(img)), axis=1)
+                        else:
+                            img = Image.open('resource/images/'+tem_path_)
+                            img = img.resize(scale_n)
+                            img = img.convert('RGBA')
+                            tem_image = numpy.concatenate((tem_image, numpy.array(img)), axis=1)
+
+                if i1 == 0:
+                    image = tem_image
+                else:
+                    image = numpy.concatenate((image, tem_image), axis=0)
+
+            img = Image.fromarray(image)
+            if scale_n_ == 0:
+                img.save('maps/'+self.mapName+'/min_bg.gif')
+            else:
+                img.save('maps/'+self.mapName+'/bg.gif')
+
+
 resource = Resource()
 
 if __name__ == "__main__":
-    # print(resource.findAll({'usage':'dw', 'flag':'red', 'action':'left', 'name':'aagun'}))
-    # print(resource.basicData)
-    # resource.makeHafuman()
-    # print(resource.findMap('default'))
-    # print(resource.findByHafuman(resource.data[0]['base64']), resource.data[0]['base64'])
-    # print(resource.findHafuman(resource.data[0]['base64']))
-    # print(resource.hafuman)
-    print(resource.findByHafuman(89))
-    # print(resource.findMap('default'))
-    # data = None
-    # with open('../maps/default/map.json', 'r') as f:
-    #     data = json.load(f)
-    #
-    # for i1, i in enumerate(data['map']):
-    #     for j1, j in enumerate(i):
-    #         data['map'][i1][j1] = int(data['map'][i1][j1])
-    # with open('../maps/default/map.json', 'w') as f:
-    #     json.dump(data, f)
-    # shutil.copytree('./sounds', './123')
-    # shutil.copytree('./sounds', './123')
+    pass
+    # resource.makeMapGeoImage((100, 100))
+    # window = QWidget()
+    # for i in range(100):
+    #     for j in range(100):
+    #         tem = QPushButton(window)
+    #         tem.move(i*100, j*30)
+    # window.show()
+    # sys.exit(Qapp.exec_())
 

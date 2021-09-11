@@ -5,8 +5,14 @@
 # @Author    :russionbear
 
 
+# def abc(a=3):
+#     print(a)
+#     a += 1
+#
+# abc()
+# abc()
+a = [1,2,3]
+b = ['a', 'b', 'c']
+for i, j in zip(a, b):
+    print(i, j)
 
-
-# if __name__ == "__main__":
-    # with open('E:/TMP/123/123.txt', 'w') as f:
-    #     pass
