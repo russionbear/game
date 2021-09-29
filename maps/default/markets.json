@@ -1,1 +1,1 @@
-{}
+{"dw1": {"name": "dw1", "type": "\u5355\u4f4d", "data": [[3, 4], [3, 5]], "flags": ["red", "blue"]}, "dw2": {"name": "dw2", "type": "\u5efa\u7b51", "data": [[2, 2], [4, 4], [4, 5]], "flags": ["red", "blue"]}, "area": {"name": "area", "type": "\u533a\u57df", "data": [[2, 4], [2, 5], [2, 6], [3, 4], [3, 5], [3, 6], [4, 4], [4, 5], [4, 6]], "flags": ["red", "blue"]}, "len": {"name": "len", "type": "\u955c\u5934", "data": [[7, 6]], "flags": ["red", "blue"]}}

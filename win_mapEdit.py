@@ -247,6 +247,7 @@ class editToolDw(QWidget):
 
         return end
 
+#被  triggerEventArea  引用
 class editToolDwLSView(QWidget):
     def __init__(self, obj=None):
         super(editToolDwLSView, self).__init__()
@@ -335,13 +336,14 @@ class editToolMarket(QWidget):
     def initUI(self):
         self.listView = QListWidget(self)
         self.listView.clicked.connect(self.choosed)
-        for i in self.data:
-            self.listView.addItem(QListWidgetItem(i['name'], self))
+        for j, i in self.data.items():
+            self.listView.addItem(QListWidgetItem(i['name']))
         layout = QVBoxLayout()
         layout.addWidget(self.listView)
         layout1 = QHBoxLayout()
         self.typeComBox = QComboBox(self)
         self.typeComBox.addItems(self.types)
+        self.typeComBox.currentTextChanged.connect(self.swap)
         layout1.addWidget(self.typeComBox)
         for i in self.flags:
             tem = QCheckBox(i, self)
@@ -384,27 +386,23 @@ class editToolMarket(QWidget):
         self.chooseBtn.data = self.data[name]['data']
 
     def swap(self, index=None):
-        if index in [self.types[0], self.types[1]]:
+        if index == self.types[0]:
+            for i in self.findChildren(QCheckBox)[1:]:
+                i.show()
+        elif index == self.types[1]:
             for i in self.findChildren(QCheckBox):
                 i.show()
-        elif index == self.types[3]:
-            for i in self.findChildren(QCheckBox):
-                if i.text() == self.flags[0]:
-                    i.hide()
-                else:
-                    i.show()
         elif index == self.types[2]:
+            for i in self.findChildren(QCheckBox):
+                i.hide()
+        elif index == self.types[3]:
             for i in self.findChildren(QCheckBox):
                 i.hide()
 
     def chooseArea(self):
         if self.listView.currentItem() == None:
             return
-        if self.chooseBtn.text() == '正在选择':
-            return
-
-        self.chooseBtn.setText('正在选择')
-        self.deleteBtn.setEnabled(False)
+        self.setEnabled(False)
         QCoreApplication.postEvent(self.parent().tmap, \
                                    marketEditEvent(marketEditEvent.choose, obj=self))
 
@@ -440,24 +438,28 @@ class editToolMarket(QWidget):
     def event(self, a0: QtCore.QEvent) -> bool:
         if a0.type() == marketEditEvent.idType:
             if a0.type_ == marketEditEvent.show:
-                self.showBtn.setText('显示')
+                self.setEnabled(True)
             elif a0.type_ == marketEditEvent.choose:
-                self.chooseBtn.setText('选择')
+                self.setEnabled(True)
                 if a0.data:
                     self.areaChhosed(a0.data)
-                self.deleteBtn.setEnabled(True)
         return super(editToolMarket, self).event(a0)
 
     def showArea(self):
         if self.listView.currentItem() == None:
             return
-        if self.showBtn.text() == '正在预览':
-            return
+        # if self.showBtn.text() == '正在预览':
+        #     return
         name = self.listView.currentItem().text()
         print('name data', self.data[name])
         if not self.data[name]['data']:
             return
-        self.showBtn.setText('正在预览')
+        # self.showBtn.setText('正在预览')
+        # self.deleteBtn.setEnabled(False)
+        # self.chooseBtn.setEnabled(False)
+        # self.showBtn.setEnabled(False)
+        # self.listView.setEnabled(False)
+        self.setEnabled(False)
         QCoreApplication.postEvent(self.parent().tmap, \
                                    marketEditEvent(marketEditEvent.show, data=self.chooseBtn.data, obj=self))
 
@@ -494,6 +496,8 @@ class editToolMarket(QWidget):
             json.dump(self.data, f)
 
 
+'''======================以上是辅助编辑器==========================='''
+'''========================================================'''
 
 
 class EditMap(QWidget):
@@ -1073,10 +1077,12 @@ class EditMap(QWidget):
                 end.append(i.mapId)
                 i.deleteLater()
             self.layers = []
-            if self.areaEditStatus == marketEditEvent.choose:
-                post = marketEditEvent(data=end, type_=marketEditEvent.choose)
-                QCoreApplication.postEvent(self.areaEditSaver, post)
-                self.areaEditStatus = marketEditEvent.none
+            if self.areaEditStatus == marketEditEvent.show:
+                end = []
+            # if self.areaEditStatus == marketEditEvent.choose:
+            post = marketEditEvent(data=end, type_=self.areaEditStatus)
+            QCoreApplication.postEvent(self.areaEditSaver, post)
+            self.areaEditStatus = marketEditEvent.none
 
         elif a0.key() == Qt.Key_Escape:
             for i in self.layers:
@@ -1108,6 +1114,14 @@ class EditMap(QWidget):
                 tem = geos.__next__()
                 com.append(tem.track['base64'])
             map['map'].append(com)
+
+        borderHfm = resource.find({'usage':'border'})['base64']
+        for i in range(self.mapSize[0]):
+            map['map'][0][i] = borderHfm
+            map['map'][-1][i] = borderHfm
+        for i in range(self.mapSize[1]):
+            map['map'][i][0] = borderHfm
+            map['map'][i][-1] = borderHfm
 
         dws = []
         for i in self.findChildren(DW):
@@ -1614,7 +1628,6 @@ class EditWin(QMainWindow):
         self.setWindowModality(Qt.ApplicationModal)
         self.show()
 
-    #--> 没选则此势力没有指挥官 <--#
     def heroCpu(self, key):
         if self.tmpView:
             try:
@@ -1675,15 +1688,6 @@ class EditWin(QMainWindow):
         #     self.tmpView.deleteLater()
         #     self.tool.herosLimitationChange(path)
 
-    def ruleCpu(self):
-        if self.tmpView:
-            try:
-                self.tmpView.deleteLater()
-            except RuntimeError:
-                pass
-        self.tmpView = ruleEditWin(self.vmap.map['name'])
-        self.tmpView.setWindowModality(Qt.ApplicationModal)
-        self.tmpView.show()
 
     ##------使用前必须切换images---------------懒啊---------------#
     def mergeCpu(self):
@@ -1701,28 +1705,6 @@ class EditWin(QMainWindow):
                     tem[i] = j
 
         with open('maps/'+self.vmap.map['name']+'/lines.json', 'w') as f:
-            json.dump(tem, f)
-
-        with open('maps/'+self.vmap.map['name']+'/basicInfo.json', 'r') as f:
-            tem = json.load(f)
-        with open('resource/basicInfo.json', 'r') as f:
-            tem_ = json.load(f)
-        if 'default' not in tem:
-            tem['default'] = tem_['default']
-        else:
-            for i1, i in tem_['default'].items():
-                if i1 not in tem['default']:
-                    tem[i] = i
-                else:
-                    for j1, j in tem_['default'][i1].items():
-                        if j1 not in tem['default'][i1]:
-                            tem['default'][j1] = j
-                        else:
-                            for k1, k in tem_['default'][i1][j1].items():
-                                if k1 not in tem_['default'][i1][j1]:
-                                    tem_['default'][i1][j1][k1] = k
-
-        with open('maps/'+self.vmap.map['name']+'/basicInfo.json', 'w') as f:
             json.dump(tem, f)
 
         resource.makeMapGeoImage()
@@ -2353,17 +2335,18 @@ class herosEditWin(QWidget):
         super(herosEditWin, self).__init__()
         self.mapName = mapName
         self.path = 'maps/'+mapName+'/heroAtrs.json'
-        self.flags = ['red', 'bule', 'green', 'yellow']
+        self.flags = ['red', 'blue', 'green', 'yellow']
         if os.path.exists(self.path):
             with open(self.path, 'r') as f:
                 self.data = json.load(f)
         else:
             self.data = {}
             for i in self.flags:
-                self.data[i] = {'enemy':[], 'heros':[], \
-                                'ctrl':'玩家', 'backup':'', 'lines':'', 'story':'', \
+                self.data[i] = {'enemy':[], 'heros':[], 'ctrl':'玩家', \
+                                'backup':'', 'lines':'', 'story':'', \
                                 'oil':0, 'bullect':0, 'money':0, 'landmissile':0 ,\
-                                'seamissile':0, 'skymissile':0, 'nuclear':0
+                                'seamissile':0, 'skymissile':0, 'nuclear':0, \
+                                '_oil': 0, '_bullect': 0, '_money': 0
                                 }
             with open(self.path, 'w') as f:
                 json.dump(self.data, f)
@@ -2448,12 +2431,33 @@ class herosEditWin(QWidget):
         tem.setMaximum(100)
         layout5.addWidget(tem)
 
+        layout6 = QHBoxLayout()
+        layout6.addWidget(QLabel('油量:', self))
+        tem = QSpinBox(self)
+        tem.data = '_oil'
+        tem.setSingleStep(100)
+        tem.setMaximum(999999)
+        layout6.addWidget(tem)
+        layout6.addWidget(QLabel('弹药:', self))
+        tem = QSpinBox(self)
+        tem.setSingleStep(10)
+        tem.data = '_bullect'
+        tem.setMaximum(99999)
+        layout6.addWidget(tem)
+        layout6.addWidget(QLabel('资金:', self))
+        tem = QSpinBox(self)
+        tem.data = '_money'
+        tem.setSingleStep(1000)
+        tem.setMaximum(999999999)
+        layout6.addWidget(tem)
+
         layout = QFormLayout()
         layout.addRow('势力', layout1)
         layout.addRow('敌对势力', layout2)
         layout.addRow('可选英雄', layout3)
         layout.addRow('重要参数', layout4)
         layout.addRow('基础资源', layout5)
+        layout.addRow('回合资源', layout6)
         tem = QPushButton('save', self)
         tem.clicked.connect(self.save)
         layout.addWidget(tem)
@@ -2520,6 +2524,8 @@ class herosEditWin(QWidget):
             json.dump(self.data, f)
 
 
+'''======================================================'''
+'''=========================触发器========================'''
 ''''
     指定单位：存活，规模，油量，弹药，占领，下潜/隐身
     指定建筑：占领
@@ -2553,16 +2559,18 @@ class TriggerEditWin(QWidget):
         with open(path, 'r') as f:
             data = json.load(f)
         self.rightView.updateToggles(data)
+        self.updateMarkets()
+        self.leftView.listView.saveBtn.click()
 
 
     def initUI(self):
         self.leftView = triggerEditWin(self.mapName, self)
         self.rightView = triggerEventEditWin(self.mapName, self)
-        self.updateBtn = QPushButton('更新标记', self)
-        self.updateBtn.clicked.connect(self.updateMarkets)
+        # self.updateBtn = QPushButton('更新标记', self)
+        # self.updateBtn.clicked.connect(self.updateMarkets)
         layout = QVBoxLayout()
         layout.addWidget(self.leftView)
-        layout.addWidget(self.updateBtn)
+        # layout.addWidget(self.updateBtn)
         layout.addWidget(self.rightView)
         self.setLayout(layout)
 
@@ -2575,12 +2583,15 @@ class TriggerEditWin(QWidget):
         else:
             with open(path, 'r') as f:
                 data = json.load(f)
-        keys = list(data.keys())
-        self.leftView.updateMarkets(keys)
-        self.rightView.updateMarkets(keys)
+        # keys = list(data.keys())
+        self.leftView.updateMarkets(data)
+        self.rightView.updateMarkets(data)
 
     def saved(self, data):
         self.rightView.updateToggles(list(data.keys()))
+
+    def saved_(self, data):
+        self.leftView.updateEvents(list(data.keys()))
 
 
 class MyListWidget(QWidget):
@@ -2665,6 +2676,8 @@ class triggerEditWin(QWidget):
             tem_data = json.load(f)
         self.listView = MyListWidget(self, tem_data)
         layout1 = QHBoxLayout()
+        self.responseBtn = QComboBox(self)
+        layout1.addWidget(self.responseBtn)
         for i in self.objs:
             tem = QPushButton(i, self)
             tem.clicked.connect(functools.partial(self.swap, i))
@@ -2699,11 +2712,13 @@ class triggerEditWin(QWidget):
     def getAddData(self):
         track = self.views[self.nowPoint].getData()
         track['obj'] = self.objs[self.nowPoint]
+        track['response'] = self.responseBtn.currentText()
         return track
 
     def choose(self, track):
         self.swap(track['obj'])
         self.views[self.nowPoint].setData(track)
+        self.responseBtn.setCurrentText(track['response'])
 
     def save(self, data):
         with open(self.path, 'w') as f:
@@ -2714,6 +2729,10 @@ class triggerEditWin(QWidget):
     def updateMarkets(self, keys):
         for i in self.views[:3]:
             i.updateMarkets(keys)
+
+    def updateEvents(self, keys):
+        self.responseBtn.clear()
+        self.responseBtn.addItems(keys)
 
 class triggerDw(QWidget):
     def __init__(self, parent):
@@ -2784,8 +2803,12 @@ class triggerDw(QWidget):
         return track
 
     def updateMarkets(self, keys):
+        newKeys = []
+        for i, j in keys.items():
+            if j['type'] == '单位':
+                newKeys.append(i)
         self.marketsBtn.clear()
-        self.marketsBtn.addItems(keys)
+        self.marketsBtn.addItems(newKeys)
 
 class triggerArea(QWidget):
     def __init__(self, parent):
@@ -2816,14 +2839,26 @@ class triggerArea(QWidget):
         return track
 
     def updateMarkets(self, keys):
+        newKeys = []
+        for i, j in keys.items():
+            if j['type'] == '区域':
+                newKeys.append(i)
         self.marketsBtn.clear()
-        self.marketsBtn.addItems(keys)
+        self.marketsBtn.addItems(newKeys)
 
 class triggerBuild(triggerArea):
     def __init__(self, parent):
         super(QWidget, self).__init__(parent)
         self.attrs = ['所属']
         self.initUI()
+
+    def updateMarkets(self, keys):
+        newKeys = []
+        for i, j in keys.items():
+            if j['type'] == '建筑':
+                newKeys.append(i)
+        self.marketsBtn.clear()
+        self.marketsBtn.addItems(newKeys)
 
 class triggerMoney(QWidget):
     def __init__(self, parent):
@@ -2966,7 +3001,7 @@ class triggerEventEditWin(QWidget):
                 json.dump({}, f)
 
         self.nowPoint = 0
-        self.objs = ['单位', '区域', '建筑', '资金', '触发器', '胜败', '指挥权', '消息']
+        self.objs = ['单位', '区域', '建筑', '镜头', '资金', '触发器', '胜败', '指挥权', '消息']
         # self.objs = ['单位', '建筑', '区域', '资金', '回合', '能量', '指令', '同盟']
         self.initUI()
         self.findChild(QPushButton).click()
@@ -2980,18 +3015,18 @@ class triggerEventEditWin(QWidget):
             tem = QPushButton(i, self)
             tem.clicked.connect(functools.partial(self.swap, i))
             layout1.addWidget(tem)
-        self.responseBtn = QComboBox(self)
-        layout1.addWidget(self.responseBtn)
         self.dwView = triggerEventDw(self)
         self.areaView = triggerEventArea(self)
         self.buildView = triggerEventBuild(self)
+        self.lenView = triggerEventLen(self)
         self.moneyView = triggerEventMoney(self)
         self.toggleView = triggerEventtoggle(self)
         self.victoryView = triggerEventVictory(self)
         self.ctrlView = triggerEventCtrl(self)
         self.msgView = triggerEventMsg(self)
         self.views = [self.dwView, self.areaView, \
-                      self.buildView, self.moneyView, self.toggleView, \
+                      self.buildView, self.lenView, self.moneyView, \
+                      self.toggleView, \
                       self.victoryView, self.ctrlView, self.msgView]
         layout = QVBoxLayout()
         layout.addWidget(self.listView)
@@ -3012,25 +3047,25 @@ class triggerEventEditWin(QWidget):
     def getAddData(self):
         track = self.views[self.nowPoint].getData()
         track['obj'] = self.objs[self.nowPoint]
-        track['response'] = self.responseBtn.currentText()
+        # track['response'] = self.responseBtn.currentText()
         return track
 
     def choose(self, track):
         self.swap(track['obj'])
         self.views[self.nowPoint].setData(track)
-        self.responseBtn.setCurrentText(track['response'])
+        # self.responseBtn.setCurrentText(track['response'])
 
     def save(self, data):
         with open(self.path, 'w') as f:
             json.dump(data, f)
+        if self.parent():
+            self.parent().saved_(data)
 
     def updateMarkets(self, keys):
-        for i in self.views[:3]:
+        for i in self.views[:4]:
             i.updateMarkets(keys)
 
     def updateToggles(self, keys):
-        self.responseBtn.clear()
-        self.responseBtn.addItems(keys)
         self.toggleView.updateToggles(keys)
 
 class triggerEventDw(QWidget):
@@ -3111,8 +3146,12 @@ class triggerEventDw(QWidget):
         return track
 
     def updateMarkets(self, keys):
+        newKeys = []
+        for i, j in keys.items():
+            if j['type'] == '单位':
+                newKeys.append(i)
         self.marketsBtn.clear()
-        self.marketsBtn.addItems(keys)
+        self.marketsBtn.addItems(newKeys)
 
 class triggerEventBuild(QWidget):
     def __init__(self, parent):
@@ -3146,8 +3185,12 @@ class triggerEventBuild(QWidget):
         return track
 
     def updateMarkets(self, keys):
+        newKeys = []
+        for i, j in keys.items():
+            if j['type'] == '建筑':
+                newKeys.append(i)
         self.marketsBtn.clear()
-        self.marketsBtn.addItems(keys)
+        self.marketsBtn.addItems(newKeys)
 
 class triggerEventArea(QWidget):
     def __init__(self, parent):
@@ -3163,14 +3206,15 @@ class triggerEventArea(QWidget):
         self.typeBtn = QComboBox(self)
         self.typeBtn.addItems(self.attrs)
         self.supportBtn = QPushButton('选择单位', self)
-        self.marketBtn = QComboBox(self)
+        self.supportBtn.clicked.connect(self.showSupport)
+        self.marketsBtn = QComboBox(self)
         layout = QVBoxLayout()
         layout.addWidget(self.typeBtn)
         for i in ['red', 'blue', 'green', 'yellow', '触发者', '被触发者']:
             tem = QCheckBox(i, self)
             layout.addWidget(tem)
         layout.addWidget(self.supportBtn)
-        layout.addWidget(self.marketBtn)
+        layout.addWidget(self.marketsBtn)
 
         self.setLayout(layout)
 
@@ -3182,23 +3226,31 @@ class triggerEventArea(QWidget):
                 i.setChecked(True)
             else:
                 i.setChecked(False)
-        self.data = track['value']
+        if track['type'] == '支援':
+            self.data = track['value']
 
     def getData(self):
         track = {'type': self.typeBtn.currentText(), 'data':[], 'value':None }
         for i in self.findChildren(QCheckBox):
             if i.isChecked():
                 track['data'].append(i.text())
-        track['value'] = self.data
+        if track['type'] == '支援':
+            track['value'] = self.data
         track['market'] = self.marketBtn.currentText()
         return track
 
     def showSupport(self):
+        if self.typeBtn.currentText() != '支援':
+            return
         self.supportView.show(self.data)
 
     def updateMarkets(self, keys):
+        newKeys = []
+        for i, j in keys.items():
+            if j['type'] == '区域':
+                newKeys.append(i)
         self.marketsBtn.clear()
-        self.marketsBtn.addItems(keys)
+        self.marketsBtn.addItems(newKeys)
 
 class triggerEventMoney(QWidget):
     def __init__(self, parent):
@@ -3241,7 +3293,7 @@ class triggerEventVictory(QWidget):
         self.typeBtn = QComboBox(self)
         self.typeBtn.addItems(self.attrs)
         self.victoryBtn = QComboBox(self)
-        self.victoryBtn.addItems(['red', 'bule', 'green', 'yellow', '触发者', '被触发者'])
+        self.victoryBtn.addItems(['red', 'blue', 'green', 'yellow', '触发者', '被触发者'])
         layout = QHBoxLayout()
         layout.addWidget(self.typeBtn)
         layout.addWidget(self.victoryBtn)
@@ -3267,7 +3319,7 @@ class triggerEventCtrl(QWidget):
         self.typeBtn = QComboBox(self)
         self.typeBtn.addItems(self.attrs)
         self.victoryBtn = QComboBox(self)
-        self.victoryBtn.addItems(['red', 'bule', 'green', 'yellow', '触发者', '被触发者'])
+        self.victoryBtn.addItems(['red', 'blue', 'green', 'yellow', '触发者', '被触发者'])
         layout = QHBoxLayout()
         layout.addWidget(self.fromBtn)
         layout.addWidget(self.typeBtn)
@@ -3350,7 +3402,41 @@ class triggerEventtoggle(QWidget):
         self.compareBtn.clear()
         self.compareBtn.addItems(keys)
 
-#-----------------------------------------------------------------
+class triggerEventLen(QWidget):
+    def __init__(self, parent):
+        super(QWidget, self).__init__(parent)
+        self.initUI()
+
+    def initUI(self):
+        self.typeBtn = QComboBox(self)
+        self.typeBtn.addItems(['镜头'])
+        self.lensBtn = QComboBox(self)
+
+        layout = QVBoxLayout()
+        layout.addWidget(self.typeBtn)
+        layout.addWidget(self.lensBtn)
+        self.setLayout(layout)
+
+    def setData(self, track):
+        self.typeBtn.setCurrentText(track['type'])
+
+    def getData(self):
+        track = {'type': self.typeBtn.currentText()}
+        track['data'] = self.compareBtn.currentText()
+        return track
+
+    def updateMarkets(self, keys):
+        newKeys = []
+        for i1, i in keys.items():
+            if i['type'] == '镜头':
+                newKeys.append(i1)
+        self.lensBtn.clear()
+        self.lensBtn.addItems(newKeys)
+
+
+'''========================================================'''
+'''=======================事件Event========================='''
+
 class marketEditEvent(QEvent):
     none = 0
     choose = 1
@@ -3368,117 +3454,6 @@ class marketEditEvent(QEvent):
         self.data = data
         self.obj = obj
 
-
-class ruleEditWin(QWidget):
-    def __init__(self, mapName):
-        super(ruleEditWin, self).__init__()
-        self.basic_path = ['stories', 'lines', 'basicInfo', 'backup', 'toggles', 'toggleEvents', 'rule']
-        self.data = {}
-        for i in self.basic_path:
-            path = 'maps/'+mapName+'/'+i+'.json'
-            if not os.path.exists(path):
-                with open(path, 'w') as f:
-                    json.dump({}, f)
-                    self.data[i] = {}
-            else:
-                with open(path, 'r') as f:
-                    self.data[i] = json.load(f)
-        self.ruleData = self.data['rule'].copy()
-        del self.data['rule']
-        self.path = 'maps/'+mapName+'/rule.json'
-        self.initUI()
-
-    def initUI(self):
-        max_cols = 12
-        layout = QVBoxLayout()
-        layout1 = QHBoxLayout()
-        layout1.addWidget(QLabel('role', self))
-        for i in self.basic_path[:-3]:
-            layout1.addWidget(QLabel(i, self))
-        layout.addLayout(layout1)
-        for i in ['red', 'blue', 'green', 'yellow']:
-            layout1 = QHBoxLayout()
-            layout1.addWidget(QLabel(i, self))
-            for j in self.basic_path[:-3]:
-                tem = QComboBox(self)
-                tem.addItems(self.data[j].keys())
-                tem.data = j
-                tem.key = i
-                if i in self.ruleData:
-                    if j in self.ruleData[i]:
-                        tem.setCurrentText(self.ruleData[i][j])
-                layout1.addWidget(tem)
-            tem = QLineEdit(self)
-            tem.setPlaceholderText('初始资金')
-            tem.key = i
-            tem.data = 'beginMoney'
-            if i in self.ruleData:
-                if 'beginMoney' in self.ruleData[i]:
-                    tem.setText(self.ruleData[i]['beginMoney'])
-            layout1.addWidget(tem)
-            tem = QLineEdit(self)
-            tem.setPlaceholderText('初始能量(%)')
-            tem.key = i
-            tem.data = 'beginEnergy'
-            if i in self.ruleData:
-                if 'beginEnergy' in self.ruleData[i]:
-                    tem.setText(self.ruleData[i]['beginEnergy'])
-            layout1.addWidget(tem)
-            layout1.addWidget(QLabel('敌人', self))
-            for j in ['red', 'blue', 'green', 'yellow']:
-                tem = QCheckBox(j, self)
-                tem.data = i
-                if i in self.ruleData:
-                    if 'enemy' in self.ruleData[i]:
-                        if j in self.ruleData[i]['enemy']:
-                            tem.setChecked(True)
-                layout1.addWidget(tem)
-
-            layout.addLayout(layout1)
-        layout.addWidget(QLabel('启动触发器', self))
-        if 'itIsOn' in self.ruleData:
-            toggles_ = self.ruleData['itIsOn']
-        else:
-            self.ruleData['itIsOn'] = []
-            toggles_ = []
-        toggles = list(self.data['toggles'].keys())
-        tLen = len(toggles)
-        i = 0
-        while 1:
-            layout1 = QHBoxLayout()
-            for j in toggles[i:i+max_cols if i+max_cols < tLen else tLen]:
-                tem = QCheckBox(j, self)
-                if j in toggles_:
-                    tem.setChecked(True)
-                layout1.addWidget(tem)
-            layout.addLayout(layout1)
-            i += max_cols
-            if i >= tLen:
-                break
-        tem = QPushButton('save', self)
-        tem.clicked.connect(self.save)
-        layout.addWidget(tem)
-        self.setLayout(layout)
-        self.show()
-
-    def save(self):
-        end = {'red':{}, 'blue':{}, 'green':{} , 'yellow':{}, 'itIson':[]}
-        for i in self.findChildren(QComboBox):
-            end[i.key][i.data] = i.currentText()
-        for i in self.findChildren(QLineEdit):
-            end[i.key][i.data] = i.text()
-        tems = self.findChildren(QCheckBox)
-        for i in tems[:16]:
-            if i.isChecked():
-                if 'enemy' not in end[i.data]:
-                    end[i.data]['enemy'] = []
-                end[i.data]['enemy'].append(i.text())
-        for i in tems[16:]:
-            if i.isChecked():
-                end['itIson'].append(i.text())
-        self.ruleData = end
-        with open(self.path, 'w') as f:
-            json.dump(self.ruleData, f)
 
 
 if __name__ == '__main__':

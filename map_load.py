@@ -1,12 +1,13 @@
 import json
 import random
-import sys
+import sys, os
 from PyQt5 import QtGui
 from PyQt5.Qt import *
 from PyQt5.QtCore import QCoreApplication
 from PyQt5 import QtCore
 # from resource_load import resource
 from resource import resource
+# from tmap_load import TMap_
 
 Qapp = QApplication(sys.argv)
 
@@ -45,6 +46,7 @@ class DW(QWidget):
         self.statusList = [None for i in range(7)]
         self.statusPoint = 0
         self.initUI()
+        self.triggers = []
 
     def initUI(self):
         self.body = QLabel(self)
@@ -239,6 +241,7 @@ class GeoD(QRect, QObject):
         # self.parent_ = parent
         size = resource.mapScaleList[resource.mapScaleDoublePoint]['body']
         self.setSize(QSize(size[0], size[1]))
+        self.triggers = []
 
     def change(self, track):
         self.track.update(track)
@@ -858,11 +861,14 @@ class miniVMap(QWidget):
             dw.move(axis[1] * self.mapBlockSize[1], axis[0] * self.mapBlockSize[0])
             dw.scale(resource.mapScaleList[self.mapScalePoint])
 
-class Arbitrator(QObject):
-    def __init__(self):
-        super(Arbitrator, self).__init__()
 
-arbitrator = Arbitrator()
+
+
+
+
+
+
+# arbitrator = Arbitrator()
 
 if __name__ == '__main__':
     # window = VMap()

@@ -10,7 +10,7 @@ from PyQt5.Qt import *
 from PyQt5 import QtGui
 from PyQt5 import QtCore
 import functools
-import sys, json, zlib
+import sys, json, zlib, os
 from map_load import DW, GeoD as Geo, VMap
 from resource import resource
 from net.netTool import ROOMSERVER, myThread
@@ -2275,7 +2275,7 @@ class ScreenMovingEnd(QEvent):
 class TMap_(QWidget):
     def __init__(self, fuse, mapName='default'):
         super(TMap_, self).__init__()
-        # usersInfo = {'red':{'hero', 'isMe', 'userName}}
+        # fuse = {'red':{'hero', 'isMe', 'user', 'userInfo}}
         ## userInfo, heroName, isMe/action, enemy, dataInfo, dispos,
         resource.initMap(mapName, True)
         self.forces = fuse
@@ -2287,30 +2287,27 @@ class TMap_(QWidget):
                 break
 
         # ----
+        keys1 = ['money', 'income', 'outcome', 'destory', 'loss', 'armyPrice', 'energy', \
+                 'bout', 'oil', 'bullect', 'landmissile', 'seamissile', 'skymissile', 'nuclear'\
+                 '_money', '_oil', '_bullect']
+        keys2 = ['backup', 'lines', 'story']
         for i, j in fuse.items():
-            tem_data = resource.mapRule[i].copy()
+            tem_data = {}
+            tem_dispos = {}
+            for k1 in keys1:
+                if k1 in resource.heroAtrs[i]:
+                    tem_data[k1] = resource.heroAtrs[i][k1]
+                else:
+                    tem_data[k1] = 0
+            for k1 in keys2:
+                if k1 in resource.heroAtrs[i]:
+                    tem_dispos[k1] = resource.heroAtrs[i][k1]
+                else:
+                    tem_dispos[k1] = ''
 
-            try:
-                money = int(tem_data['beginMoney'])
-            except ValueError:
-                money = 1
-            try:
-                energy = int(tem_data['beginEnergy'])
-            except ValueError:
-                energy = 0
-
-            self.forces[i]['dataInfo'] = {'money': money, 'income':0 ,\
-                                          'outcome': 0, 'bout': 1, \
-                                          'destory': 0, 'loss': 0, 'armyPrice': 0, \
-                                          'energy': energy, }
-            if 'enemy' in tem_data:
-                self.forces[i]['enemy'] = tem_data['enemy'].copy()
-                del tem_data['enemy']
-            else:
-                self.forces[i]['enemy'] = []
-
-            del tem_data['beginMoney'], tem_data['beginEnergy']
-            self.forces[i]['dispos'] = tem_data
+            self.forces[i]['dataInfo'] = tem_data
+            self.forces[i]['enemy'] = resource.heroAtrs[i]['enemy'].copy()
+            self.forces[i]['dispos'] = tem_dispos
 
 
         self.initUI(mapName)
@@ -2447,6 +2444,7 @@ class TMap_(QWidget):
 
         self.rightMenu = mapRightMenu(self)
         self.rightMenu.hide()
+        self.canRightMenuShow = True
         self.leftMenu = mapLeftMenu(self)
         self.leftMenu.hide()
         self.infoVew = infoView(self)
@@ -2627,70 +2625,10 @@ class TMap_(QWidget):
 
         # self.setMouseTracking(True)
 
-    # def mapScale(self, shouldBigger=True):
-    #     min, max = 0, self.mapScalePoint
-    #     #-------------- can scale--------------------#
-    #     if ( shouldBigger and self.mapScalePoint == max ) or\
-    #         (not shouldBigger and self.mapScalePoint == min):
-    #         return
-    #     primA = self.width() // 2 - self.children()[0].x(), self.height() // 2 - self.children()[0].y()
-    #     mapBlockSize = resource.mapScaleList[self.mapScalePoint]['body']
-    #     self.mapScalePoint = max if shouldBigger else min
-    #     self.mapBlockSize = resource.mapScaleList[self.mapScalePoint]['body']
-    #     n = self.mapBlockSize[0] / mapBlockSize[0]
-    #     primA = self.width() // 2 - round(primA[0] * n), self.height() // 2 - round(primA[1] * n)
-    #     tem_data = resource.mapScaleList[self.mapScalePoint]
-    #     tem_children = self.findChildren((Geo, DW))
-    #     for j, i in enumerate(tem_children):
-    #         i.scale(tem_data)
-    #         i.move(primA[1] + i.mapId[1] * self.mapBlockSize[1], primA[0] + i.mapId[0] * self.mapBlockSize[0])
-    #
-    #
-    #
-    #     move_x = self.mapSize[0] * self.mapBlockSize[0] - self.width()
-    #     move_y = self.mapSize[1] * self.mapBlockSize[1] - self.height()
-    #     self.canMove = True if move_x > 0 else False, True if move_y > 0 else False
-    #     move_x = 0 if move_x > 0 else -move_x // 2
-    #     move_y = 0 if move_y > 0 else -move_y // 2
-    #     self.mapMove(move_x, move_y)
-    #     if shouldBigger:
-    #         self.min_bg.hide()
-    #         self.isRun = True
-    #     else:
-    #         self.min_bg.show()
-    #         self.isRun = False
-    #     # self.mapAdjust()
-    #     # if shouldBigger:
-    #     #     if self.talkView.shouldShow:
-    #     #         self.talkView.show()
-    #     #         tem_geo = self.pointer_geo[self.talkView.mapId[0]][self.talkView.mapId[1]]
-    #     #         x1, y1 = tem_geo.x()>self.width()//2, tem_geo.y()>self.height()//2
-    #     #         if not x1 and not y1:
-    #     #             self.talkView.setStyleSheet(
-    #     #                 'background-color:white;padding:6px;border-radius:15px;border-top-left-radius:0;')
-    #     #             x2, y2 = tem_geo.x(), tem_geo.y() + tem_geo.height()
-    #     #         elif x1 and not y1:
-    #     #             self.talkView.setStyleSheet(
-    #     #                 'background-color:white;padding:6px;border-radius:15px;border-top-right-radius:0;')
-    #     #             x2, y2 = tem_geo.x() - (self.talkView.width() - tem_geo.width()), tem_geo.y() + tem_geo.height()
-    #     #         elif not x1 and y1:
-    #     #             self.talkView.setStyleSheet(
-    #     #                 'background-color:white;padding:6px;border-radius:15px;border-bottom-left-radius:0;')
-    #     #             x2, y2 = tem_geo.x(), tem_geo.y() - self.talkView.height()
-    #     #         elif not x1 and not y1:
-    #     #             self.talkView.setStyleSheet(
-    #     #                 'background-color:white;padding:6px;border-radius:15px;border-bottom-right-radius:0;')
-    #     #             x2, y2 = tem_geo.x() - (
-    #     #                         self.talkView.width() - tem_geo.width()), tem_geo.y() - self.talkView.height()
-    #     #         self.talkView.move(x2, y2)
-    #     #     self.Head.show()
-    #     #     self.Head.move(0, 0)
-    #     # else:
-    #     #     self.talkView.hide()
-    #     #     self.Head.hide()
     def showMiniMap(self, true=True):
         if true:
             self.min_bg.show()
+            self.min_bg.raise_()
             self.isRun = False
         else:
             self.min_bg.hide()
@@ -2859,6 +2797,9 @@ class TMap_(QWidget):
     def mousePressEvent(self, a0: QtGui.QMouseEvent) -> None:
         if not self.isRun:
             return
+
+        self.rightMenu.hide()
+        self.canRightMenuShow = True
         if a0.button() == 1:
             resource.player['btn'].play()
         if a0.button() == 2:
@@ -2872,6 +2813,10 @@ class TMap_(QWidget):
         self.shopkeeper.handleEvent(a0)
         if a0.button() == 2:
             self.hasMove = None
+            '''不可删'''
+            if not self.shopkeeper.waiter and self.canRightMenuShow:
+                self.rightMenu.show(a0.pos())
+            self.canRightMenuShow = True
             self.shopkeeper.handleEvent(a0)
 
     def mouseMoveEvent(self, a0: QtGui.QMouseEvent) -> None:
@@ -2881,6 +2826,7 @@ class TMap_(QWidget):
             return
         x, y = a0.x() - self.hasMove.x(), a0.y() - self.hasMove.y()
         self.hasMove = a0.pos()
+        self.canRightMenuShow = False
         # self.mapMove(x, y, True)
         self.mapMove(x, y)
 
@@ -2888,11 +2834,8 @@ class TMap_(QWidget):
         if self.isRun:
             self.shopkeeper.handleEvent(a0)
         if self.isCtrlDown:
-            # if self.isRun:
-            # self.clear(None)
             self.showMiniMap(True if a0.angleDelta().y() > 0 else False)
-            # self.mapScale()
-            # return
+
 
     def keyPressEvent(self, a0: QtGui.QKeyEvent) -> None:
         if a0.key() == Qt.Key_Return:
@@ -2900,11 +2843,12 @@ class TMap_(QWidget):
                 self.inputVew.show()
             else:
                 self.inputVew.hide()
+        elif a0.key() == Qt.Key_Control:
+            self.isCtrlDown = True
+
         if not self.isRun:
             return
         self.shopkeeper.handleEvent(a0)
-        if a0.key() == Qt.Key_Control:
-            self.isCtrlDown = True
 
     def keyReleaseEvent(self, a0: QtGui.QKeyEvent) -> None:
         #self.shopkeeper.handleEvent(a0)
@@ -3095,6 +3039,9 @@ class TMap_(QWidget):
         self.forces[self.nowForce]['dataInfo']['money'] += \
             self.forces[self.nowForce]['dataInfo']['income']
 
+    def initToggle(self):
+        pass
+
 
 
 
@@ -3180,8 +3127,10 @@ class msgView(QLabel):
         self.setFont(QFont('宋体', 15))
         self.setWordWrap(True)
         self.setAlignment(Qt.AlignBottom)
-        self.send({'from':'polar', 'to':'bear', \
+        self.send({'from':'polar', 'to':'red', \
                    'info':'09876543211234567890发斯蒂芬发送到<h1>h1</h1>'})
+        self.flags = ['red', 'blue', 'green', 'yellow']
+        self.alliance = []
 
         self.clearer = QTimer(self)
         self.clearer.timeout.connect(self.clear_)
@@ -3218,6 +3167,16 @@ class msgView(QLabel):
         return endText, self.fontMetrics().lineSpacing()*(endText.count('\n')+1)
 
     def send(self, ms):
+        myForce = self.parent().myForce
+        if myForce != ms['from']:
+            if ms['to'] == '盟友们' and myForce in self.parent().forces[ms['from']]['enemy']:
+                return
+            elif ms['to'] == '敌人们' and myForce not in self.parent().forces[ms['from']]['enemy']:
+                return
+            elif ms['to'] == '所有人':
+                pass
+            elif ms['to'] != myForce:
+                return
         ms['time'] = time.time()
         self.data.append(ms)
         msg = self.makeText(ms)
@@ -3236,6 +3195,36 @@ class msgView(QLabel):
             for i in self.data:
                 endT += self.makeText(i)[0]
             self.setText(endT)
+
+        if ms['info'].lower() == 'tm':
+            if ms['from'] not in self.flags or ms['to'] not in self.flags:
+                return
+            for i in self.alliance:
+                if i['from'] == ms['to']:
+                    if i['to'] == ms['from']:
+                        for j, k in self.parent().forces.items():
+                            if j == ms['from']:
+                                enemy = []
+                                for p in k['enemy']:
+                                    if p != ms['to']:
+                                        enemy.append(p)
+                                self.parent().forces[j]['enemy'] = enemy
+                            elif j == ms['to']:
+                                enemy = []
+                                for p in k['enemy']:
+                                    if p != ms['from']:
+                                        enemy.append(p)
+                                self.parent().forces[j]['enemy'] = enemy
+                    break
+        elif ms['info'].lower() == 'hm':
+            if ms['from'] not in self.flags or ms['to'] not in self.flags:
+                return
+            if ms['from'] not in self.parent().forces[ms['to']]['enemy']:
+                self.parent().forces[ms['to']]['enemy'].append(ms['from'])
+            elif ms['to'] not in self.parent().forces[ms['from']]['enemy']:
+                self.parent().forces[ms['from']]['enemy'].append(ms['to'])
+
+
 
     def clear_(self):
         inner_time = 10
@@ -3415,6 +3404,7 @@ class mapRightMenu(QWidget):
     def show(self, pos):
         self.move(pos)
         super(mapRightMenu, self).show()
+        self.raise_()
 
 class mapLeftMenu(QWidget):
     def __init__(self, parent):
@@ -3647,7 +3637,7 @@ class militaryView(QWidget):
 
     def initUI(self):
         layout1 = QHBoxLayout()
-        key_1 = ['势力', '金钱', '收入', '本回合支出', '损失', '造成的损失', '军事实力', '能量值']
+        key_1 = ['势力', '金钱', '收入', '本回合支出', '损失', '造成的损失', '军事实力', '能量值', '敌人']
         key_2 = ['money', 'income', 'outcome', 'loss', 'destory', 'armyPrice', 'energy']
         for i in key_1:
             tem = QLabel(i, self)
@@ -3664,6 +3654,9 @@ class militaryView(QWidget):
                 tem.flag = i
                 tem.data = k
                 layout1.addWidget(tem)
+            tem = QComboBox(self)
+            tem.addItems(j['enemy'])
+            layout1.addWidget(tem)
             layout.addLayout(layout1)
         self.setFixedSize(700, 400)
         self.setLayout(layout)
@@ -3682,7 +3675,7 @@ class militaryView(QWidget):
                 if i.track['flag'] != 'none':
                     self.tmap.forces[i.track['flag']]['dataInfo']['income'] += 1000
 
-        for i in self.findChildren(QLabel)[8:]:
+        for i in self.findChildren(QLabel)[9:]:
             i.setText(str(self.tmap.forces[i.flag]['dataInfo'][i.data]))
             
     def show(self):
@@ -3826,12 +3819,6 @@ tmap:
 
 
 class ShopKeeper(QObject):
-    # leftUp = 1
-    # leftDown = 1
-    # rightUp = 1
-    # rightDown = 1
-    # keyUp = 1
-    # keyDown = 1
     onlyOne = None
     def __new__(cls, *args, **kwargs):
         if ShopKeeper.onlyOne == None:
@@ -3846,14 +3833,14 @@ class ShopKeeper(QObject):
 
     def handleEvent(self, a0):
         if not self.waiter:
-            print('no waiter', a0.type()==QEvent.MouseButtonPress, a0.button())
             if a0.type() == QEvent.MouseButtonPress:
                 if a0.button() == 1:
                     self.lockBaby(a0)
-            elif a0.type() == QEvent.MouseButtonRelease:
-                if a0.button() == 2:
-                    print('fsdfsdf')
-                    self.tmap.rightMenu.show(a0.pos())
+            # elif a0.type() == QEvent.MouseButtonRelease:
+            #     if a0.button() == 2:
+            #         if self.tmap.canRightMenuShow:
+            #             self.tmap.rightMenu.show(a0.pos())
+            #         self.tmap.canRightMenuShow = True
             return
         elif a0.type() == QEvent.MouseButtonRelease:
             if a0.button() == 2:
@@ -3876,7 +3863,7 @@ class ShopKeeper(QObject):
             elif track['name'] == 'footmen':
                 self.waiter = DwFootmen(self, self.tmap, track)
             elif track['name'] == 'gunnery':
-                self.waiter = DwGunnery(self, self.tmap, track)
+                self.waiter = DwFootmen(self, self.tmap, track)
             elif track['name'] == 'howitzer':
                 self.waiter = DwHowitzer(self, self.tmap, track)
             elif track['name'] == 'B2':
@@ -3910,8 +3897,8 @@ class ShopKeeper(QObject):
     def parent(self):
         return self.parent
 
-    def sendToServer(self):
-        pass
+    def sendToServer(self, command):
+        print(command)
 
     def clientHandle(self):
         pass
@@ -3927,6 +3914,10 @@ class ShopKeeper(QObject):
 
         elif a0.type() == InputMsgEvent.idType:
             self.tmap.msgView.send(a0.ms)
+
+            command = a0.ms
+            command['type'] = DwFootmen.input
+            self.sendToServer(command)
             
         return super(ShopKeeper, self).event(a0)
 
@@ -4146,7 +4137,6 @@ class ShopWaiter(QObject):
         return sorted(end, key=lambda arg: len(arg))
 
     def countRoadNd(self, dw, road):
-        return road
         directions = [(-1, 1), (1, 1), (-1, -1), (1, -1)]
         cols = len(self.tmap.map['map'][0])
         rows = len(self.tmap.map['map'])
@@ -4319,7 +4309,8 @@ class ShopWaiter(QObject):
         if resource.basicData['gf'][dw.track['name']]['attackAftermove'] == '0' and moved:
             return targetsToChoose
         max = resource.basicData['gf'][dw.track['name']]['gf_maxdistance']
-        if max == 0 or dw.bullect == 0 or (self.tmap.pointer_dw[endP[0]][endP[1]] and self.dw.mapId != endP ):
+        # if max == 0 or dw.bullect == 0 or (self.tmap.pointer_dw[endP[0]][endP[1]] and self.dw.mapId != endP ):
+        if max == 0 or dw.bullect == 0:
             return targetsToChoose
         min = resource.basicData['gf'][dw.track['name']]['gf_mindistance']
         x1, y1 = endP
@@ -4395,7 +4386,7 @@ class ShopWaiter(QObject):
             self.tmap.pointer_dw[endP[0]][endP[1]] = None
             print('enemy has beng!!!!')
             dw.doBlood(blood1)
-            dw.doBody('leftG' if dw.track['flag'] == self.tmap.myForce else 'rigthG')
+            dw.doBody('leftG' if dw.track['flag'] != self.tmap.myForce else 'rigthG')
             dw.moved = True
             # dw1 = dw.makeTrack()
             # dw2['isAlive'] = False
@@ -4404,7 +4395,7 @@ class ShopWaiter(QObject):
             print('nothing has beng!!!')
             dw.doBlood(blood1)
             enemy.doBlood(blood2)
-            dw.doBody('leftG' if dw.track['flag'] == self.tmap.myForce else 'rigthG')
+            dw.doBody('leftG' if dw.track['flag'] != self.tmap.myForce else 'rigthG')
             dw.moved = True
             # dw1 = dw.makeTrack()
             # dw2 = enemy.makeTrack()
@@ -4434,6 +4425,7 @@ class DwFootmen(ShopWaiter):
     attackShow = 8
     attacked = 9
     load = 10
+    input = 18
     def __init__(self, shopkeeper, tmap, track):
         super(DwFootmen, self).__init__(shopkeeper, tmap, track)
         self.dw = self.tmap.pointer_dw[self.track['mapId'][0]][self.track['mapId'][1]]
@@ -4520,6 +4512,9 @@ class DwFootmen(ShopWaiter):
                         self.actionStatus = DwFootmen.attacked
                     self.enemy = i.mapId
                     self.tmap.animeMove(newRoad, self)
+
+                    command = {'type': self.actionStatus, 'road':newRoad, 'moveShow':self.movedShow, 'enemy':self.enemy}
+                    self.shopkeeper.sendToServer(command)
                     break
 
     def wheelEvent(self, a0: QtGui.QWheelEvent):
@@ -4548,6 +4543,9 @@ class DwFootmen(ShopWaiter):
                 elif arg == '搭载':
                     self.actionStatus = DwFootmen.load
             self.tmap.animeMove(newRoad, self)
+
+            command = {'type': self.actionStatus, 'road':newRoad, 'moveShow':self.movedShow}
+            self.shopkeeper.sendToServer(command)
         elif arg == '攻击':
             self.tmap.showLayers(self.targetsToChoose, 'red')
             self.actionStatus = DwFootmen.attackShow
@@ -4561,6 +4559,9 @@ class DwFootmen(ShopWaiter):
             else:
                 self.actionStatus = DwFootmen.occupy
             self.tmap.animeMove(newRoad, self)
+
+            command = {'type': self.actionStatus, 'road':newRoad, 'moveShow':self.movedShow}
+            self.shopkeeper.sendToServer(command)
 
     def afterAnimation(self):
         if self.actionStatus == DwFootmen.encounter or self.actionStatus == DwFootmen.waiting:
@@ -4576,7 +4577,10 @@ class DwFootmen(ShopWaiter):
             QCoreApplication.postEvent(self.shopkeeper, post)
 
         elif self.actionStatus == DwFootmen.attacked:
-            print('fser234234;;;okok')
+            action = self.roadsToChoose['roads'][self.roadsToChoose['point']]
+            self.tmap.pointer_dw[action[0][0]][action[0][1]] = None
+            self.tmap.pointer_dw[action[-1][0]][action[-1][1]] = self.dw
+            self.dw.mapId = action[-1]
             self.judgement(self.dw, self.enemy)
             # self.shopkeeper.unLockBaby()
             post = ShopMsgEvent()
@@ -4669,16 +4673,19 @@ class DwB2(DwFootmen):
             else:
                 self.actionStatus = DwB2.stealth
             self.tmap.animeMove(newRoad, self)
+
+            command = {'type': self.actionStatus, 'road':newRoad, 'moveShow':self.movedShow}
+            self.shopkeeper.sendToServer(command)
         else:
             super(DwB2, self).handleLeftMenu(arg)
 
     def afterAnimation(self):
         if self.actionStatus == DwB2.stealth:
             self.dw.isStealth = not self.dw.isStealth
-            post = ShopMsgEvent()
-            QCoreApplication.postEvent(self.shopkeeper, post)
-        else:
-            super(DwB2, self).afterAnimation()
+            self.actionStatus = DwB2.waiting
+            # post = ShopMsgEvent()
+            # QCoreApplication.postEvent(self.shopkeeper, post)
+        super(DwB2, self).afterAnimation()
 
 class DwSubmarine(DwFootmen):
     stealth = 11
@@ -4703,16 +4710,20 @@ class DwSubmarine(DwFootmen):
             else:
                 self.actionStatus = DwSubmarine.stealth
             self.tmap.animeMove(newRoad, self)
+
+            command = {'type': self.actionStatus, 'road':newRoad, 'moveShow':self.movedShow}
+            self.shopkeeper.sendToServer(command)
         else:
             super(DwSubmarine, self).handleLeftMenu(arg)
 
     def afterAnimation(self):
         if self.actionStatus == DwSubmarine.stealth:
             self.dw.isDiving = not self.dw.isDiving
-            post = ShopMsgEvent()
-            QCoreApplication.postEvent(self.shopkeeper, post)
-        else:
-            super(DwSubmarine, self).afterAnimation()
+            self.actionStatus = DwSubmarine.waiting
+            # post = ShopMsgEvent()
+            # QCoreApplication.postEvent(self.shopkeeper, post)
+        # else:
+        super(DwSubmarine, self).afterAnimation()
 
 
 class DwConveyor(DwFootmen):
@@ -4766,6 +4777,10 @@ class DwConveyor(DwFootmen):
                             else:
                                 self.actionStatus = DwConveyor.unloadmove
                             self.tmap.animeMove(newRoad, self)
+
+                            command = {'type': self.actionStatus, 'road':newRoad, \
+                                       'moveShow':self.movedShow, 'area':self.unloadAreaChoosed, 'cursor':self.unloadChoosed}
+                            self.shopkeeper.sendToServer(command)
                     break
             else:
                 self.actionBack()
@@ -4821,11 +4836,7 @@ class DwConveyor(DwFootmen):
             for i, j in enumerate(self.unloadChoosed):
                 self.dw.loadings[int(j)]['mapId'] = self.unloadAreaChoosed[i]
                 choosed.append(self.dw.loadings[int(j)])
-                #
-                # dw = DW(self.tmap, self.dw.loadings[int(j)])
-                # dw.setGeometry(self.tmap.pointer_geo[self.unloadAreaChoosed[i][0]][self.unloadAreaChoosed[i][1]].geometry())
-                # self.tmap.pointer_dw[self.unloadAreaChoosed[i][0]][self.unloadAreaChoosed[i][1]] = dw
-                # dw.moved = False
+
                 tem_.append(int(j))
             for i1, i in enumerate(self.dw.loadings):
                 if i1 not in tem_:
@@ -4855,11 +4866,13 @@ class DwConveyor(DwFootmen):
             # self.actionStatus = DwConveyor.locked
 
             self.tmap.leftMenu.hide()
+            self.tmap.clearLayers()
             QCoreApplication.postEvent(self.shopkeeper, ShopMsgEvent(ShopMsgEvent.relock))
         else:
             super(DwConveyor, self).actionBack()
 
 class DwTransport(DwConveyor):
+    supply = 17
     def __init__(self, shopkeeper, tmap, track):
         super(DwTransport, self).__init__(shopkeeper, tmap, track)
         self.supplyElement = []
@@ -4901,12 +4914,16 @@ class DwTransport(DwConveyor):
                     else:
                         print(i, 'supply error')
 
+                command = {'type': DwTransport.supply, 'element':self.supplyElementp, 'supply':a0.supply}
+                self.shopkeeper.sendToServer(command)
+
             post = ShopMsgEvent()
             QCoreApplication.postEvent(self.shopkeeper, post)
         return super(DwTransport, self).event(a0)
 
 
 class Building(ShopWaiter):
+    build = 16
     def __init__(self, shopkeeper, tmap, track):
         super(Building, self).__init__(shopkeeper, tmap, track)
         # QCoreApplication.postEvent(self.tmap, BuildDwEvent(track, True))
@@ -4917,6 +4934,9 @@ class Building(ShopWaiter):
             if a0.track:
                 post = BuildDwEvent(a0.track)
                 print('buld')
+                command = {'type': Building.build, 'track': a0.track}
+                self.shopkeeper.sendToServer(command)
+
                 QCoreApplication.postEvent(self.tmap, post)
             post = ShopMsgEvent()
             QCoreApplication.postEvent(self.shopkeeper, post)
@@ -4924,6 +4944,225 @@ class Building(ShopWaiter):
 
 
 
+'''================================================='''
+'''=====================仲裁者======================='''
+
+
+class Arbitrator(QObject):
+    def __init__(self, mapName, tmap:TMap_):
+        super(Arbitrator, self).__init__()
+        self.mapName = mapName
+        self.tmap = tmap
+        self.helper = ArbitratorEvent(self)
+
+        path = 'maps/'+mapName+'/markets.json'
+        if os.path.exists(path):
+            with open(path, 'r') as f:
+                self.markets = json.load(f)
+        else:
+            self.markets = {}
+
+
+        path = 'maps/'+mapName+'/toggles.json'
+        if os.path.exists(path):
+            with open(path, 'r') as f:
+                self.toggles = json.load(f)
+        else:
+            self.toggles = {}
+
+        path = 'maps/'+mapName+'/toggleEvents.json'
+        if os.path.exists(path):
+            with open(path, 'r') as f:
+                self.toggleEvents = json.load(f)
+        else:
+            self.toggleEvents = {}
+
+    def checkData(self):
+        shouldDel = []
+        for i1, i in self.markets.items():
+            end = []
+            if i['type'] == '单位':
+                dws = self.tmap.pointer_dw
+                for j in i['data']:
+                    if dws[j[0]][j[1]]:
+                        if dws[j[0]][j[1]].track['flag'] in i['flags']:
+                            end.append(j)
+                if not end:
+                    shouldDel.append(i1)
+            elif i['type'] == '建筑':
+                dws = self.tmap.pointer_geo
+                for j in i['data']:
+                    if dws[j[0]][j[1]]:
+                        if dws[j[0]][j[1]].track['flag'] in i['flags']:
+                            end.append(j)
+                if not end:
+                    shouldDel.append(i1)
+        for i in shouldDel:
+            del self.markets[i]
+
+        shouldDel = []
+        for i1, i in self.toggles.items():
+            if 'market' in i:
+                if i['market'] not in self.markets:
+                    shouldDel.append(i1)
+        for i in shouldDel:
+            del self.toggles[i]
+
+        shouldDel = []
+        for i1, i in self.toggleEvents.items():
+            if 'market' in i:
+                if i['market'] not in self.markets:
+                    shouldDel.append(i1)
+        for i in shouldDel:
+            del self.toggleEvents[i]
+
+        shouldDel = []
+        for i1, i in self.toggleEvents.items():
+            if i['response'] not in self.toggles:
+                shouldDel.append(i1)
+            elif i['obj'] == '触发器':
+                if i['data'] not in self.toggles:
+                    shouldDel.append(i1)
+        for i in shouldDel:
+            del self.toggleEvents[i]
+
+
+    def installToggles(self):
+        pass
+
+    def installToggleEvents(self):
+        pass
+
+    '''阵亡==》直接调用,要调用两个哦'''
+    def dwCall(self, dw:DW, triggerFlag=None):
+        news = []
+        for i in dw.triggers:
+            if i in self.toggles:
+                news.append(i)
+            else:
+                continue
+            toggle = self.toggles[i]
+            if toggle['type'] == '所属':
+                if dw.track['flag'] not in self.markets[toggle['market']]['flags']:
+                    self.helper.handle(toggle['response'], \
+                                       dw.track['flag'], triggerFlag)
+
+            elif toggle['type'] == '隐身':
+                if not (bool(toggle['data']) ^ bool(dw.isStealth)):
+                    self.helper.handle(toggle['response'], dw.track['flag'])
+            elif toggle['type'] == '下潜':
+                if not (bool(toggle['data']) ^ bool(dw.isDiving)):
+                    self.helper.handle(toggle['response'], dw.track['flag'])
+            elif toggle['type'] == '占领':
+                if dw.occupied > 0:
+                    self.helper.handle(toggle['response'], dw.track['flag'])
+                # elif toggle['type'] == '阵亡':
+                #     if '阵亡' in types:
+                #         self.helper.handle(toggle['response'], dw.track['flag'])
+            elif toggle['type'] == '规模':
+                isOk = False
+                if toggle['data'] == '<':
+                    if dw.bloodValue < toggle['value']:
+                        isOk = True
+                elif toggle['data'] == '=':
+                    if dw.bloodValue == toggle['value']:
+                        isOk = True
+                elif toggle['data'] == '>':
+                    if dw.bloodValue > toggle['value']:
+                        isOk = True
+                if isOk:
+                    self.helper.handle(toggle['response'], dw.track['flag'], triggerFlag)
+
+            elif toggle['type'] == '弹药':
+                isOk = False
+                if toggle['data'] == '<':
+                    if dw.bullect < toggle['value']:
+                        isOk = True
+                elif toggle['data'] == '=':
+                    if dw.bullect == toggle['value']:
+                        isOk = True
+                elif toggle['data'] == '>':
+                    if dw.bullect > toggle['value']:
+                        isOk = True
+                if isOk:
+                    self.helper.handle(toggle['response'], dw.track['flag'], triggerFlag)
+
+            elif toggle['type'] == '油量':
+                isOk = False
+                if toggle['data'] == '<':
+                    if dw.oil < toggle['value']:
+                        isOk = True
+                elif toggle['data'] == '=':
+                    if dw.oil == toggle['value']:
+                        isOk = True
+                elif toggle['data'] == '>':
+                    if dw.oil > toggle['value']:
+                        isOk = True
+                if isOk:
+                    self.helper.handle(toggle['response'], dw.track['flag'])
+
+        dw.triggers = news
+
+    def buildCall(self, geo:Geo, triggerFlag=None):
+        news = []
+        for i in geo.triggers:
+            if i in self.toggles:
+                news.append(i)
+            else:
+                continue
+            toggle = self.toggles[i]
+            if toggle['type'] == '所属':
+                if toggle['type'] not in self.markets[toggle['market']]['flags']:
+                    self.helper.handle(self.toggles, geo.track['flag'], triggerFlag)
+
+
+        geo.triggers = news
+
+    def areaCall(self, road, dw:DW):
+        class Status:
+            none = 0
+            outer = 1
+            inner = 2
+            goin = 3
+            goout = 4
+            all = 5
+        for i in self.toggles:
+            if i['obj'] != '区域':
+                continue
+            status = Status.none
+            for j in road:
+                for k in self.markets[i['market']]['data']:
+                    if tuple(k) == tuple(j):
+                        if status == Status.none:
+                            status = Status.inner
+                        elif status == Status.outer:
+                            status = Status.goin
+                        elif status == Status.goout:
+                            status = Status.all
+                        break
+                else:
+                    if status == Status.none:
+                        status = Status.outer
+                    elif status == Status.inner:
+                        status = Status.goout
+                    elif status == Status.goin:
+                        status = Status.all
+            if status == Status.goin:
+                if '进入' in i['type']:
+                    self.helper.handle(i['response'], )
+            elif status == Status.goout:
+                if '移出' in i['type']:
+                    pass
+            elif status == Status.all:
+                pass
+
+
+class ArbitratorEvent(QObject):
+    def __init__(self, arbitrator):
+        self.arbitrator = arbitrator
+
+    def handle(self, eventId, triggered, trigger=None):
+        pass
 
 
 
@@ -4943,11 +5182,11 @@ if __name__ == '__main__':
     # window = TMap(users=hereusers, tUser=hereusers[0])
     # window.show()
     fuse = {
-        'red': {'heroName': 'google', 'isMe': True, \
+        'red': {'heroName': 'google', 'isMe': True, 'user':'玩家', \
                 'userInfo': {'userId': '123', 'userName': 'sdfd'}}, \
-        'blue': {'heroName': 'google', 'isMe': False, \
+        'blue': {'heroName': 'google', 'isMe': False, 'user':'玩家', \
                  'userInfo': {'userId': '123', 'userName': 'sdfd'}}, \
-        'green': {'heroName': 'google', 'isMe': False, \
+        'green': {'heroName': 'google', 'isMe': False, 'user':'玩家', \
                   'userInfo': {'userId': '123', 'userName': 'sdfd'}}
     }
     window = TMap_(fuse)

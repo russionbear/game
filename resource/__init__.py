@@ -456,6 +456,7 @@ class Resource():
                 img.save('maps/'+self.mapName+'/bg.gif')
 
 
+
 resource = Resource()
 
 if __name__ == "__main__":
