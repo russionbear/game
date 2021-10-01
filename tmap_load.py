@@ -3,14 +3,14 @@
 # @FileName  :tmap_load.py
 # @Time      :2021/7/22 16:06
 # @Author    :russionbear
-
+import random
 import time
 
 from PyQt5.Qt import *
 from PyQt5 import QtGui
 from PyQt5 import QtCore
 import functools
-import sys, json, zlib, os
+import sys, json, zlib, os, random
 from map_load import DW, GeoD as Geo, VMap
 from resource import resource
 from net.netTool import ROOMSERVER, myThread
@@ -2288,7 +2288,7 @@ class TMap_(QWidget):
 
         # ----
         keys1 = ['money', 'income', 'outcome', 'destory', 'loss', 'armyPrice', 'energy', \
-                 'bout', 'oil', 'bullect', 'landmissile', 'seamissile', 'skymissile', 'nuclear'\
+                 'bout', 'oil', 'bullect', 'landmissile', 'seamissile', 'skymissile', 'nuclear', \
                  '_money', '_oil', '_bullect']
         keys2 = ['backup', 'lines', 'story']
         for i, j in fuse.items():
@@ -2330,7 +2330,6 @@ class TMap_(QWidget):
         self.mapMoveCpuThread = Thread(target=self.mapMoveCpuCall)
         self.mapMoveCpuThread.start()
         '''
-
 
     def initUI(self, mapName, winSize=QSize(800, 800)):
         self.mapBlockSize = resource.mapScaleList[resource.mapScaleDoublePoint]['body']
@@ -2751,9 +2750,15 @@ class TMap_(QWidget):
     
     '''
 
-    def moveToDw(self, dw: DW = None, **kwargs):
+    def moveToDw(self, p, **kwargs):
+        '''
+
+        :param p:(x, y)
+        :param kwargs:
+        :return:
+        '''
         # dw = self.findChild(DW)
-        x, y = self.width() / 2 - dw.x(), self.height() / 2 - dw.y()
+        x, y = self.width() / 2 - p[0], self.height() / 2 - p[1]
         if self.pointer_geo[0][0].x() + x >= 0:
             x = -self.pointer_geo[0][0].x()
         elif self.pointer_geo[-1][-1].x() + x <= self.width() - self.mapBlockSize[0]:
@@ -3050,7 +3055,7 @@ class infoView(QFrame):
         super(infoView, self).__init__(parent)
         self.initUI()
 
-    def updateInfo(self, track):
+    def updateInfo(self):
         self.head.setPixmap(
             resource.find({'usage': 'dw', 'name': track['name'], 'flag': track['flag'], 'action': 'left'})[
                 'pixmap'].scaled(80, 80))
@@ -4980,6 +4985,10 @@ class Arbitrator(QObject):
     def checkData(self):
         shouldDel = []
         for i1, i in self.markets.items():
+            if not i['flags']:
+                shouldDel.append(i1)
+                continue
+
             end = []
             if i['type'] == '单位':
                 dws = self.tmap.pointer_dw
@@ -5118,51 +5127,347 @@ class Arbitrator(QObject):
 
         geo.triggers = news
 
-    def areaCall(self, road, dw:DW):
-        class Status:
-            none = 0
-            outer = 1
-            inner = 2
-            goin = 3
-            goout = 4
-            all = 5
-        for i in self.toggles:
+    '''移动之后才能调用'''
+    def areaCall(self, triggerFlag=None):
+        for j, i in self.toggles.items():
             if i['obj'] != '区域':
                 continue
-            status = Status.none
-            for j in road:
-                for k in self.markets[i['market']]['data']:
-                    if tuple(k) == tuple(j):
-                        if status == Status.none:
-                            status = Status.inner
-                        elif status == Status.outer:
-                            status = Status.goin
-                        elif status == Status.goout:
-                            status = Status.all
-                        break
-                else:
-                    if status == Status.none:
-                        status = Status.outer
-                    elif status == Status.inner:
-                        status = Status.goout
-                    elif status == Status.goin:
-                        status = Status.all
-            if status == Status.goin:
-                if '进入' in i['type']:
-                    self.helper.handle(i['response'], )
-            elif status == Status.goout:
-                if '移出' in i['type']:
-                    pass
-            elif status == Status.all:
-                pass
+            hasF = False
+            fFlag = None
+            hasE = False
+            eFalg = None
+            if '己方' in i['type']:
+                for j in self.markets[self.toggles['market']]:
+                    dw = self.tmap.pointer_dw[j[0]][j[1]]
+                    if dw:
+                        if dw.track['flag'] in j['flags']:
+                            hasF = True
+                            fFlag = dw.track['flag']
+                            break
+            elif '敌方' in i['type']:
+                for j in self.markets[self.toggles['market']]:
+                    dw = self.tmap.pointer_dw[j[0]][j[1]]
+                    if dw:
+                        for k in j['flags']:
+                            if dw.track['flag'] in self.tmap.forces[k]['enemy']:
+                                hasE = True
+                        if hasE:
+                            break
 
+            if i['type'] == '无己方单位':
+                if not hasF:
+                    self.helper.handle(i['response'], self.markets[self.toggles['market']]['flags'][0])
+
+            elif i['type'] == '有己方单位':
+                if hasF:
+                    self.helper.handle(i['response'], fFlag, fFlag)
+            elif i['type'] == '无敌方单位':
+                if not hasE:
+                    self.helper.handle(i['response'], self.markets[self.toggles['market']]['flags'][0])
+            elif i['type'] == '有敌方单位':
+                if hasE:
+                    self.helper.handle(i['response'], eFalg, self.markets[self.toggles['market']]['flags'][0])
+
+
+        # class Status:
+        #     none = 0
+        #     outer = 1
+        #     inner = 2
+        #     goin = 3
+        #     goout = 4
+        #     all = 5
+        # for i in self.toggles:
+        #     if i['obj'] != '区域':
+        #         continue
+        #     status = Status.none
+        #     for j in road:
+        #         for k in self.markets[i['market']]['data']:
+        #             if tuple(k) == tuple(j):
+        #                 if status == Status.none:
+        #                     status = Status.inner
+        #                 elif status == Status.outer:
+        #                     status = Status.goin
+        #                 elif status == Status.goout:
+        #                     status = Status.all
+        #                 break
+        #         else:
+        #             if status == Status.none:
+        #                 status = Status.outer
+        #             elif status == Status.inner:
+        #                 status = Status.goout
+        #             elif status == Status.goin:
+        #                 status = Status.all
+        #     if status == Status.goin:
+        #         if '进入' in i['type']:
+        #             self.helper.handle(i['response'], )
+        #     elif status == Status.goout:
+        #         if '移出' in i['type']:
+        #             pass
+        #     elif status == Status.all:
+        #         pass
+
+    def moneyCall(self, triggerFlag=None):
+        key_1 = ['资金', '损失', '回合支出', '造成损失', '军力', '总油耗', '总弹药消耗', '能量']
+        key_2 = ['money', 'loss', 'outcome', 'destory', 'armyPrice', 'oil', 'bullect', 'energy']
+        for j, i in self.toggles.items():
+            if i['obj'] != '资金':
+                continue
+            dd2 = self.tmap.forces[i['flag']]['dataInfo'][key_2[key_1.index(i['type'])]]
+            canToggle = False
+            if i['data'] == '<':
+                if dd2 < i['value']:
+                    canToggle = True
+            elif i['data'] == '>':
+                    canToggle = True
+            elif i['data'] == '=':
+                if dd2 == i['value']:
+                    canToggle = True
+            if canToggle:
+                self.helper.handle(i['response'], i['flag'], triggerFlag)
+
+    def boutCall(self, nowBout, triggerFlag):
+        for j, i in self.toggles.items():
+            if i['obj'] != '回合':
+                continue
+            if triggerFlag not in i['value']:
+                continue
+            if i['type'] == '指定回合':
+                if nowBout == i['data']:
+                    self.helper.handle(i['response'], trigger=self.tmap.nowForce)
+            elif i['type'] == '间隔回合':
+                if int(nowBout) % int(i['data']) == 0:
+                    self.helper.handle(i['response'], trigger=self.tmap.nowForce)
+
+    def commandCall(self, command, triggerFalg):
+        for j, i in self.toggles.items():
+            if i['obj'] != '命令':
+                continue
+            if command == i['data']:
+                self.helper.handle(i['response'], trigger=triggerFalg)
 
 class ArbitratorEvent(QObject):
     def __init__(self, arbitrator):
+        super(ArbitratorEvent, self).__init__()
         self.arbitrator = arbitrator
+        self.tmap = arbitrator.tmap
 
-    def handle(self, eventId, triggered, trigger=None):
+    def handle(self, eventId, triggered=None, trigger=None):
+        event = self.arbitrator.toggleEvents[eventId]
+        if event['obj'] == '单位':
+            self.dwCall(eventId, triggered, trigger)
+        elif event['obj'] == '建筑':
+            self.buildCall(eventId, triggered, trigger)
+        elif event['obj'] == '区域':
+            self.areaCall(eventId, triggered, trigger)
+        elif event['obj'] == '镜头':
+            self.lenCall(eventId, triggered, trigger)
+        elif event['obj'] == '资金':
+            self.moneyCall(eventId, triggered, trigger)
+        elif event['obj'] == '触发器':
+            self.toggleCall(eventId, triggered, trigger)
+        elif event['obj'] == '胜败':
+            self.victoryCall(eventId, triggered, trigger)
+        elif event['obj'] == '指挥权':
+            self.ctrlCall(eventId, triggered, trigger)
+        elif event['obj'] == '消息':
+            self.msgCall(eventId, triggered, trigger)
+
+    def dwCall(self, eventId, triggered, trigger):
+        event = self.arbitrator.toggleEvents[eventId]
+        if event['type'] == '规模':
+            if event['data'] == '+':
+                for i in self.tmap.findChildren(DW):
+                    if eventId in i.triggerEvents:
+                        i.doBlood(i.bloodValue + event['value'])
+            if event['data'] == '-':
+                for i in self.tmap.findChildren(DW):
+                    if eventId in i.triggerEvents:
+                        i.doBlood(i.bloodValue - event['value'])
+            if event['data'] == '=':
+                for i in self.tmap.findChildren(DW):
+                    if eventId in i.triggerEvents:
+                        i.doBlood(event['value'])
+
+        elif event['type'] == '油量':
+            if event['data'] == '+':
+                for i in self.tmap.findChildren(DW):
+                    if eventId in i.triggerEvents:
+                        i.oil += event['value']
+            if event['data'] == '-':
+                for i in self.tmap.findChildren(DW):
+                    if eventId in i.triggerEvents:
+                        i.oil -= event['value']
+            if event['data'] == '=':
+                for i in self.tmap.findChildren(DW):
+                    if eventId in i.triggerEvents:
+                        i.oil = event['value']
+
+        elif event['type'] == '弹药':
+            if event['data'] == '+':
+                for i in self.tmap.findChildren(DW):
+                    if eventId in i.triggerEvents:
+                        i.bullect += event['value']
+            if event['data'] == '-':
+                for i in self.tmap.findChildren(DW):
+                    if eventId in i.triggerEvents:
+                        i.bullect -= event['value']
+            if event['data'] == '=':
+                for i in self.tmap.findChildren(DW):
+                    if eventId in i.triggerEvents:
+                        i.bullect = event['value']
+
+        elif event['type'] == '占领':
+            if event['data'] == '+':
+                for i in self.tmap.findChildren(DW):
+                    if eventId in i.triggerEvents:
+                        if resource.basicData['money']['canoccupy'][i.track['name']] == '1':
+                            i.occupied += event['value']
+            if event['data'] == '-':
+                for i in self.tmap.findChildren(DW):
+                    if eventId in i.triggerEvents:
+                        if resource.basicData['money']['canoccupy'][i.track['name']] == '1':
+                            i.occupied -= event['value']
+            if event['data'] == '=':
+                for i in self.tmap.findChildren(DW):
+                    if eventId in i.triggerEvents:
+                        if resource.basicData['money']['canoccupy'][i.track['name']] == '1':
+                            i.occupied = event['value']
+
+        elif event['type'] == '所属':
+            if event['type'] == '被触发者':
+                pass
+            elif event['data'] == '触发者':
+                for i in self.tmap.findChildren(DW):
+                    if eventId in i.triggerEvents:
+                        i.change(trigger)
+            else:
+                for i in self.tmap.findChildren(DW):
+                    if eventId in i.triggerEvents:
+                        i.change(event['data'])
+
+        elif event['type'] == '阵亡':
+            for i in self.tmap.findChildren(DW):
+                if eventId in i.triggerEvents:
+                    self.tmap.pointer_dw[i.mapId[0]][i.mapId[1]] = None
+                    i.deleteLater()
+
+        elif event['type'] == '隐身':
+            for i in self.tmap.findChildren(DW):
+                if eventId in i.triggerEvents:
+                    if resource.basicData['money']['canstealth'][i.track['name']] == '1':
+                        i.isStealth = event['data']
+
+        elif event['type'] == '下潜':
+            for i in self.tmap.findChildren(DW):
+                if eventId in i.triggerEvents:
+                    if resource.basicData['money']['candiving'][i.track['name']] == '1':
+                        i.isDiving = event['data']
+
+    def buildCall(self, eventId, triggered, trigger):
+        event = self.arbitrator.toggleEvents[eventId]
+        if event['type'] == '所属':
+            if event['data'] == '被触发者':
+                pass
+            elif event['data'] == '触发者':
+                for i in self.tmap.findChildren(Geo):
+                    if i.track['usage'] == 'geo':
+                        if eventId in i.triggerEvents:
+                            track = i.track
+                            track['flag'] = trigger
+                            i.change(track)
+            else:
+                for i in self.tmap.findChildren(Geo):
+                    if i.track['usage'] == 'geo':
+                        if eventId in i.triggerEvents:
+                            track = i.track
+                            track['flag'] = event['data']
+                            i.change(track)
+
+    def areaCall(self, eventId, triggered, trigger):
+        event = self.arbitrator.toggleEvents[eventId]
+        flags = self.arbitrator.markets[event]['market']['flags']
+        markets = self.arbitrator.markets[event]['market']['data']
+        destory = 0
+        if event['type'] == '阵亡':
+            for i in markets:
+                dw = self.tmap.pointer_dw[i[0]][i[1]]
+                if dw:
+                    if dw.track['flag'] in flags:
+                        self.tmap.pointer_dw[i[0]][i[1]] = None
+                        dw.deleteLater()
+        elif event['type'] == '大损伤':
+            destory = 5
+        elif event['type'] == '中等损伤':
+            destory = 2
+        elif event['type'] == '小损伤':
+            destory = 1
+        elif event['type'] == '支援':
+            empty = []
+            for i in markets:
+                if not self.tmap.pointer_dw[i[0]][i[1]]:
+                    empty.append(tuple(i))
+            if not empty:
+                return
+            loadings = []
+            for i in empty:
+                ran = random.randint(0, event['value']['__up__']-1)
+                ran2 = random.randint(0, len(flags) - 1)
+                for j1, j in event['value']:
+                    if j['donw'] <= ran < j['up']:
+                        break
+                track = resource.find({'usage':'dw', 'name':'j1', 'flag':ran2})
+                track['mapId'] = i
+                loadings.append(track)
+            QCoreApplication.postEvent(self.tmap, UnloadDwEvent(loadings))
+
+        if destory:
+            for i in markets:
+                dw = self.tmap.pointer_dw[i[0]][i[1]]
+                if dw:
+                    if dw.track['flag'] in flags:
+                        dw.doBlood(dw.bloodValue - destory)
+
+    '''需要sorket'''
+    def lenCall(self, eventId, triggered, trigger):
+        market = self.arbitrator.markets[self.arbitrator.toggleEvents[eventId]['market']]
+        self.tmap.moveToDw(market['data'][0])
+
+    def moneyCall(self, eventId, triggered, trigger):
+        keys_1 = ['money', 'energy', 'oil', 'bullect', \
+                 'landmissile', 'seamissile', 'skymissile', 'nuclear']
+        keys_2 = ['资金', '能量', '油', '弹药', '对陆导弹', '对空导弹', '对舰导弹', '核弹']
+        event = self.arbitrator.toggleEvents[eventId]
+        key3 = keys_1[keys_2.index(event['data'])]
+        if event['data'] == '=':
+            if '触发者' in event['flags']:
+                self.tmap.forces[trigger]['dataInfo'][key3] = event['value']
+            for i in event['flags']:
+                self.tmap.forces[i]['dataInfo'][key3] = event['value']
+        elif event['data'] == '+':
+            if '触发者' in event['flags']:
+                self.tmap.forces[trigger]['dataInfo'][key3] += event['value']
+            for i in event['flags']:
+                self.tmap.forces[i]['dataInfo'][key3] += event['value']
+        elif event['data'] == '-':
+            if '触发者' in event['flags']:
+                self.tmap.forces[trigger]['dataInfo'][key3] -= event['value']
+            for i in event['flags']:
+                self.tmap.forces[i]['dataInfo'][key3] -= event['value']
+        if key3 in ['money', 'energy']:
+            self.tmap.infoView.updateInfo()
+
+    def toggleCall(self, eventId, triggered, trigger):
         pass
+
+    def victoryCall(self, eventId, triggered, trigger):
+        pass
+
+    def ctrlCall(self, eventId, triggered, trigger):
+        pass
+
+    def msgCall(self, eventId, triggered, trigger):
+        pass
+
 
 
 

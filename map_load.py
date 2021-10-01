@@ -47,6 +47,7 @@ class DW(QWidget):
         self.statusPoint = 0
         self.initUI()
         self.triggers = []
+        self.triggerEvents = []
 
     def initUI(self):
         self.body = QLabel(self)
@@ -85,6 +86,12 @@ class DW(QWidget):
         # self.doBlood(5)
 
     def doBlood(self, nu:float):
+        if nu > 10:
+            nu = 10
+        elif nu <= 0:
+            self.parent().point_dw[self.mapId[0]][self.mapId[1]] = None
+            self.deleteLater()
+            return
         self.bloodValue = nu
         if round(nu) == 10:
             self.blood.setText('')
@@ -155,6 +162,17 @@ class DW(QWidget):
             self.doStatus(None)
 
     def flush(self):
+        if self.oil < 0:
+            self.parent().point_dw[self.mapId[0]][self.mapId[1]] = None
+            self.deleteLater()
+        if self.occupied < 0:
+            self.occupied = 0
+        elif self.occupied >= 20:
+            geo = self.parent().point_geo[self.mapId[0]][self.mapId[1]]
+            track = geo.track
+            track['flag'] = self.track['flag']
+            geo.change(track)
+
         self.statusList[0] = 'oil' if self.oil <= float(resource.basicData['gf'][self.track['name']]['oil'])*0.4 else None
         self.statusList[1] = 'bullect' if self.bullect <= float(resource.basicData['gf'][self.track['name']]['bullect'])*0.4 \
                                           and int(resource.basicData['gf'][self.track['name']]['bullect']) != 0 else None
@@ -242,6 +260,7 @@ class GeoD(QRect, QObject):
         size = resource.mapScaleList[resource.mapScaleDoublePoint]['body']
         self.setSize(QSize(size[0], size[1]))
         self.triggers = []
+        self.triggerEvents = []
 
     def change(self, track):
         self.track.update(track)

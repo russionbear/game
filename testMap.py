@@ -5,10 +5,5 @@
 # @Author    :russionbear
 
 
-# def abc(a=3):
-#     print(a)
-#     a += 1
-#
-# abc()
-# abc()
-print( 0 ^ bool(7) )
+a = [1, 2, '3434']
+print(a.index(2))

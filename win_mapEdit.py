@@ -308,7 +308,8 @@ class editToolDwLSView(QWidget):
             return
         data = {}
         for i in self.findChildren(QSpinBox):
-            data[i.data] = i.value()
+            if i.value() > 0:
+                data[i.data] = i.value()
         self.dataSaver.data = data
         self.hide()
 
@@ -2525,7 +2526,6 @@ class herosEditWin(QWidget):
 
 
 '''======================================================'''
-'''=========================触发器========================'''
 ''''
     指定单位：存活，规模，油量，弹药，占领，下潜/隐身
     指定建筑：占领
@@ -2533,7 +2533,7 @@ class herosEditWin(QWidget):
     资金：损失，造成，军队资金，
     指定回合，每个回合
     指挥官能量
-    输入指令
+    输入指令:结盟，毁盟
 
 
     *** 回合延迟
@@ -2546,6 +2546,7 @@ class herosEditWin(QWidget):
     胜利，移交控制权限
     屏幕提示
 '''
+'''=========================触发器========================'''
 
 class TriggerEditWin(QWidget):
     def __init__(self, mapName):
@@ -2561,7 +2562,7 @@ class TriggerEditWin(QWidget):
         self.rightView.updateToggles(data)
         self.updateMarkets()
         self.leftView.listView.saveBtn.click()
-
+        self.rightView.listView.saveBtn.click()
 
     def initUI(self):
         self.leftView = triggerEditWin(self.mapName, self)
@@ -2688,10 +2689,10 @@ class triggerEditWin(QWidget):
         self.moneyView = triggerMoney(self)
         self.boutView = triggerBout(self)
         self.commandView = triggerCommand(self)
-        self.alliance = triggerAlliance(self)
+        # self.alliance = triggerAlliance(self)
         self.views = [self.dwView, self.areaView, \
                       self.buildView, self.moneyView, self.boutView, \
-                      self.commandView, self.alliance]
+                      self.commandView]
         layout = QVBoxLayout()
         layout.addWidget(self.listView)
         layout.addLayout(layout1)
@@ -2813,9 +2814,7 @@ class triggerDw(QWidget):
 class triggerArea(QWidget):
     def __init__(self, parent):
         super(triggerArea, self).__init__(parent)
-        self.attrs = ['己方单位进入', '己方单位移出', '己方单位阵亡', \
-                      '友方单位进入', '友方单位移出', '友方单位阵亡', \
-                      '敌方单位进入', '敌方单位移出', '敌方单位阵亡']
+        self.attrs = ['无己方单位', '有己方单位', '无敌方单位', '有敌方单位']
         self.initUI()
 
     def initUI(self):
@@ -2958,36 +2957,36 @@ class triggerCommand(QWidget):
         track['data'] = self.inputBtn.text()
         return track
 
-class triggerAlliance(QWidget):
-    def __init__(self, parent):
-        super(triggerAlliance, self).__init__(parent)
-        self.attr = ['结盟', '毁盟']
-        self.initUI()
-
-    def initUI(self):
-        layout = QHBoxLayout()
-        self.typeBtn = QComboBox(self)
-        self.typeBtn.addItems(self.attr)
-        layout.addWidget(self.typeBtn)
-        for i in ['red', 'blue', 'green', 'yellow']:
-            tem = QCheckBox(i, self)
-            layout.addWidget(tem)
-        self.setLayout(layout)
-
-    def setData(self, track):
-        self.typeBtn.setCurrentText(track['type'])
-        for i in self.findChildren(QCheckBox):
-            if i.text() in track['data']:
-                i.setChecked(True)
-            else:
-                i.setChecked(False)
-
-    def getData(self):
-        track = {'type': self.typeBtn.currentText(), 'data':[]}
-        for i in self.findChildren(QCheckBox):
-            if i.isChecked():
-                track['data'].append(i.text())
-        return track
+# class triggerAlliance(QWidget):
+#     def __init__(self, parent):
+#         super(triggerAlliance, self).__init__(parent)
+#         self.attr = ['结盟', '毁盟']
+#         self.initUI()
+#
+#     def initUI(self):
+#         layout = QHBoxLayout()
+#         self.typeBtn = QComboBox(self)
+#         self.typeBtn.addItems(self.attr)
+#         layout.addWidget(self.typeBtn)
+#         for i in ['red', 'blue', 'green', 'yellow']:
+#             tem = QCheckBox(i, self)
+#             layout.addWidget(tem)
+#         self.setLayout(layout)
+#
+#     def setData(self, track):
+#         self.typeBtn.setCurrentText(track['type'])
+#         for i in self.findChildren(QCheckBox):
+#             if i.text() in track['data']:
+#                 i.setChecked(True)
+#             else:
+#                 i.setChecked(False)
+#
+#     def getData(self):
+#         track = {'type': self.typeBtn.currentText(), 'data':[]}
+#         for i in self.findChildren(QCheckBox):
+#             if i.isChecked():
+#                 track['data'].append(i.text())
+#         return track
 
 ##-------------------------------------------
 
@@ -3100,7 +3099,7 @@ class triggerEventDw(QWidget):
         for i1, i in enumerate(self.attrs):
             if i == text:
                 break
-        if i1 < 3:
+        if i1 < 4:
             self.compareBtn.show()
             self.spinBtn.show()
             self.isBtn.hide()
@@ -3122,7 +3121,7 @@ class triggerEventDw(QWidget):
         for i1, i in enumerate(self.attrs):
             if i == track['type']:
                 break
-        if i1 < 3:
+        if i1 < 4:
             self.compareBtn.setCurrentText(track['data'])
             self.spinBtn.setValue(track['value'])
         elif i1 < 7:
@@ -3135,7 +3134,7 @@ class triggerEventDw(QWidget):
         for i1, i in enumerate(self.attrs):
             if i == track['type']:
                 break
-        if i1 < 3:
+        if i1 < 4:
             track['data'] = self.compareBtn.currentText()
             track['value'] = self.spinBtn.value()
         elif i1 < 7:
@@ -3197,12 +3196,15 @@ class triggerEventArea(QWidget):
         super(triggerEventArea, self).__init__(parent)
         self.attrs = ['阵亡', '大损伤', '中等损伤', '小损伤', '支援']
         self.data = {}
-        self.supportView = editToolDwLSView(self)
-        self.supportView.setWindowModality(Qt.ApplicationModal)
-        self.supportView.hide()
         self.initUI()
 
     def initUI(self):
+        self.supportView = editToolDwLSView(self)
+        self.supportView.setWindowModality(Qt.ApplicationModal)
+        self.supportView.hide()
+        for i in self.supportView.findChildren(QSpinBox):
+            i.setSingleStep(1)
+
         self.typeBtn = QComboBox(self)
         self.typeBtn.addItems(self.attrs)
         self.supportBtn = QPushButton('选择单位', self)
@@ -3210,9 +3212,9 @@ class triggerEventArea(QWidget):
         self.marketsBtn = QComboBox(self)
         layout = QVBoxLayout()
         layout.addWidget(self.typeBtn)
-        for i in ['red', 'blue', 'green', 'yellow', '触发者', '被触发者']:
-            tem = QCheckBox(i, self)
-            layout.addWidget(tem)
+        # for i in ['red', 'blue', 'green', 'yellow', '触发者', '被触发者']:
+        #     tem = QCheckBox(i, self)
+        #     layout.addWidget(tem)
         layout.addWidget(self.supportBtn)
         layout.addWidget(self.marketsBtn)
 
@@ -3235,7 +3237,13 @@ class triggerEventArea(QWidget):
             if i.isChecked():
                 track['data'].append(i.text())
         if track['type'] == '支援':
-            track['value'] = self.data
+            newTrack = {}
+            count = 0
+            for i, j in self.data.copy().items():
+                newTrack[i] = {'data':j, 'down':count, 'up':count+j}
+                count += j
+            newTrack['__up__'] = count
+            track['value'] = newTrack
         track['market'] = self.marketBtn.currentText()
         return track
 
@@ -3265,22 +3273,36 @@ class triggerEventMoney(QWidget):
         self.compareBtn.addItems(['+', '-', '='])
         self.spinBtn = QSpinBox(self)
         self.spinBtn.setMaximum(1000000)
+        layout1 = QHBoxLayout()
+        for i in ['red', 'blue', 'green', 'yellow', '触发者']:
+            tem = QCheckBox(i, self)
+            tem.data = i
 
         layout = QVBoxLayout()
         layout.addWidget(self.typeBtn)
         layout.addWidget(self.compareBtn)
         layout.addWidget(self.spinBtn)
+        layout.addLayout(layout1)
         self.setLayout(layout)
 
     def setData(self, track):
         self.typeBtn.setCurrentText(track['type'])
         self.compareBtn.setCurrentText(track['data'])
         self.spinBtn.setValue(track['value'])
+        for i in self.findChildren(QCheckBox):
+            if i.data in track['flags']:
+                i.setChecked(True)
+            else:
+                i.setChecked(False)
 
     def getData(self):
         track = {'type': self.typeBtn.currentText()}
         track['data'] = self.compareBtn.currentText()
         track['value'] = self.spinBtn.value()
+        track['flags'] = []
+        for i in self.findChildren(QCheckBox):
+            if i.isChecked():
+                track['flags'].append(i.data)
         return track
 
 class triggerEventVictory(QWidget):
